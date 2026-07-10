@@ -5,4 +5,5 @@ data/*.json
 coverage/
 *.log
 .playwright-mcp/
+.worktrees/
 did-vc-dashboard.png
