@@ -55,12 +55,12 @@
             </section>
             <section class="panel">
               <div class="section-heading"><div><p>RECENT ACTIVITY</p><h2>最近验证</h2></div></div>
-              <div id="recent-logs" class="activity-list empty-state">暂无验证记录</div>
+              <div class="list-tools"><input id="log-search" placeholder="搜索验签记录" /><select id="log-page-size"><option>10</option><option>20</option><option>50</option></select></div><div id="recent-logs" class="activity-list empty-state">暂无验证记录</div><div id="log-pagination"></div>
             </section>
           </div>
           <section class="panel record-panel">
             <div class="section-heading"><div><p>CREDENTIAL REGISTER</p><h2>凭证台账</h2></div><button class="button secondary" data-go="issue">＋ 签发凭证</button></div>
-            <div class="table-wrap"><table><thead><tr><th>凭证 / 学员</th><th>课程</th><th>签发时间</th><th>状态</th><th></th></tr></thead><tbody id="credential-table"></tbody></table></div>
+            <div class="list-tools"><input id="vc-search" placeholder="搜索 VC" /><select id="vc-page-size"><option>10</option><option>20</option><option>50</option></select></div><div class="table-wrap"><table><thead><tr><th>凭证 / 学员</th><th>课程</th><th>签发时间</th><th>状态</th><th></th></tr></thead><tbody id="credential-table"></tbody></table></div><div id="vc-pagination"></div>
           </section>
         </section>
 
@@ -70,6 +70,7 @@
               <div class="section-heading"><div><p>CREATE IDENTITY</p><h2>创建 DID 身份</h2></div></div>
               <form id="did-form">
                 <label>身份名称<input name="name" required placeholder="例如：可信学习中心" /></label>
+                <label>DID Method<select name="method"><option value="example" selected>did:example（支持生命周期）</option><option value="key">did:key（不可更新）</option></select></label>
                 <fieldset><legend>身份角色</legend><div class="segmented"><label><input type="radio" name="role" value="issuer" checked /><span>Issuer 发行方</span></label><label><input type="radio" name="role" value="holder" /><span>Holder 持有人</span></label></div></fieldset>
                 <button class="button primary" type="submit">生成 DID 与密钥对</button>
               </form>
@@ -77,7 +78,7 @@
             </section>
             <section class="panel">
               <div class="section-heading"><div><p>DID REGISTRY</p><h2>本地身份注册表</h2></div><span class="count" id="did-count">0 个身份</span></div>
-              <div id="did-list" class="identity-list empty-state">尚未创建 DID</div>
+              <div class="list-tools"><input id="did-search" placeholder="搜索 DID" /><select id="did-page-size"><option>10</option><option>20</option><option>50</option></select></div><div id="did-list" class="identity-list empty-state">尚未创建 DID</div><div id="did-pagination"></div>
             </section>
           </div>
         </section>

@@ -44,7 +44,7 @@ test('原始 VC 的全部验证项通过', async (t) => {
   const result = await service.verifyCredential(record.credential, { saveLog: false });
 
   assert.equal(result.valid, true);
-  assert.deepEqual(result.checks.map((check) => check.passed), [true, true, true, true, true]);
+  assert.deepEqual(result.checks.map((check) => check.passed), [true, true, true, true, true, true, true]);
 });
 
 test('篡改学员姓名或课程名称后签名验证失败', async (t) => {
@@ -73,12 +73,10 @@ test('Issuer DID 不存在时验证失败', async (t) => {
 
 test('超过有效期的凭证验证失败', async (t) => {
   const { service, issuer, holder } = await fixture(t);
-  const record = await issue(service, issuer, holder, { validUntil: '2020-01-01T00:00:00.000Z' });
-  const result = await service.verifyCredential(record.credential, { saveLog: false });
-
-  assert.equal(result.valid, false);
-  assert.equal(result.checks.find((check) => check.key === 'validity').passed, false);
-  assert.equal(result.checks.find((check) => check.key === 'signature').passed, true);
+  await assert.rejects(
+    () => issue(service, issuer, holder, { validUntil: '2020-01-01T00:00:00.000Z' }),
+    /有效期必须晚于生效时间/,
+  );
 });
 
 test('撤销后的原始凭证验证失败', async (t) => {
@@ -88,6 +86,6 @@ test('撤销后的原始凭证验证失败', async (t) => {
   const result = await service.verifyCredential(record.credential, { saveLog: false });
 
   assert.equal(result.valid, false);
-  assert.equal(result.checks.find((check) => check.key === 'revocation').passed, false);
+  assert.equal(result.checks.find((check) => check.key === 'credentialStatus').passed, false);
   assert.equal(result.checks.find((check) => check.key === 'signature').passed, true);
 });

@@ -69,3 +69,22 @@ test('DID 停用不可逆并禁止继续更新或轮换', async (t) => {
   await assert.rejects(() => service.rotateDidKey(issuer.id, { expectedVersion: 2 }), /DID 已停用/);
   await assert.rejects(() => service.deactivateDid(issuer.id, { expectedVersion: 2 }), /DID 已停用/);
 });
+
+test('did:key 由 Ed25519 公钥生成并声明不支持生命周期操作', async (t) => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'did-key-'));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const service = new VcService(new JsonStore(path.join(directory, 'store.json')));
+  const holder = await service.createDid({ name: '密钥持有人', role: 'holder', method: 'key' });
+
+  assert.match(holder.did, /^did:key:z[1-9A-HJ-NP-Za-km-z]+$/);
+  assert.equal(holder.method, 'key');
+  assert.deepEqual(holder.capabilities, { update: false, rotateKey: false, deactivate: false });
+  await assert.rejects(() => service.updateDid(holder.id, { name: '新名称', expectedVersion: 1 }), /did:key 不支持更新/);
+  await assert.rejects(() => service.rotateDidKey(holder.id, { expectedVersion: 1 }), /did:key 不支持密钥轮换/);
+  await assert.rejects(() => service.deactivateDid(holder.id, { expectedVersion: 1 }), /did:key 不支持停用/);
+});
+
+test('未知 DID Method 必须明确失败', async (t) => {
+  const { service } = await fixture(t);
+  await assert.rejects(() => service.createDid({ name: '未知', role: 'holder', method: 'web' }), /不支持的 DID Method/);
+});
