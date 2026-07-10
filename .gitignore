@@ -7,3 +7,6 @@ coverage/
 .playwright-mcp/
 .worktrees/
 did-vc-dashboard.png
+playwright-report/
+test-results/
+.test-data/
