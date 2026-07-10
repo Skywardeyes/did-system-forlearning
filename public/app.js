@@ -1,4 +1,4 @@
-import { completeDidCreation } from './did-ui.js';
+import { completeDidCreation, renderDidCard } from './did-ui.js';
 
 const state = { dids: [], credentials: [], verificationLogs: [], selectedCredential: null };
 const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证' };
@@ -52,12 +52,9 @@ function renderDids() {
   const list = $('#did-list');
   if (!state.dids.length) { list.className = 'identity-list empty-state'; list.textContent = '尚未创建 DID'; return; }
   list.className = 'identity-list';
-  list.innerHTML = state.dids.map((item) => `
-    <article class="identity-card">
-      <div class="identity-head"><span class="role-tag ${item.role}">${item.role.toUpperCase()}</span><strong>${escapeHtml(item.name)}</strong></div>
-      <code title="${item.did}">${item.did}</code>
-      <div class="identity-actions"><button class="text-button" data-document="${item.id}">查看 DID Document</button><span class="count">${formatDate(item.createdAt)}</span></div>
-    </article>`).join('');
+  list.innerHTML = state.dids
+    .map((item) => renderDidCard(item, { escapeHtml, formatDate }))
+    .join('');
   $$('[data-document]').forEach((button) => button.addEventListener('click', () => {
     const identity = state.dids.find((item) => item.id === button.dataset.document);
     openJson(`${identity.name} · DID Document`, identity.document);
