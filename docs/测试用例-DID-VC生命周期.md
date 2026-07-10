@@ -89,10 +89,36 @@
 | E2E-005 | P0/E | 暂停、验证失败、恢复、再次验证 | 状态和结论按顺序变化 |
 | E2E-006 | P0/E | 停用 example Issuer 后签发及验证历史 VC | 新签发被拒绝；历史签名有效但整体验证失败 |
 
-## 8. 完成标准
+## 8. 日志模块
+
+| 编号 | 优先级/层级 | 场景与步骤 | 预期结果 |
+|---|---|---|---|
+| LOG-001 | P0/S,A | 成功创建 DID | 写入 audit/info、success=true、DID_CREATE，目标和关联 ID 正确 |
+| LOG-002 | P0/S,A | 使用非法 Method 创建 DID | 写入 audit/warn、success=false 和稳定错误码 |
+| LOG-003 | P0/S,A | 执行 DID 更新、轮换、停用 | 每项产生正确 action、结果和目标字段 |
+| LOG-004 | P0/S,A | 执行 VC 签发、暂停、恢复、替代、撤销 | 每项产生对应 audit 日志 |
+| LOG-005 | P0/S,A | 验签成功与失败各一次 | 两条 VC_VERIFY 正确记录结果且不记录完整 VC |
+| LOG-006 | P0/A | 提交非法 JSON、超大请求、未知路由 | 记录对应 system warn/error、action 和错误码 |
+| LOG-007 | P0/S | 模拟存储读写异常 | 记录 STORE_READ_FAILED/STORE_WRITE_FAILED error，公开详情无堆栈 |
+| LOG-008 | P0/S | context 含 privateJwk、proofValue、token、password、credential | 写盘前递归替换为 `[REDACTED]` |
+| LOG-009 | P0/S | 日志写入失败 | 原业务结果不变；console.error 兜底；不产生递归日志 |
+| LOG-010 | P1/S,A,U | 组合文本、类型、结果、级别、模块和时间范围 | 条件 AND 组合、文本字段 OR 匹配，结果准确 |
+| LOG-011 | P1/S,A | 开始时间晚于结束时间 | 返回参数错误并记录 warn 系统日志 |
+| LOG-012 | P1/S,A,U | 分页和同一时间稳定排序 | 支持 10/20/50，最新在前，同时间按 ID 降序 |
+| LOG-013 | P0/S | 连续写入 5,001 条 | 仅保留最新 5,000 条，最旧记录被删除 |
+| LOG-014 | P0/A,U | 重置演示数据 | 原日志保留并新增 DEMO_RESET |
+| LOG-015 | P0/A,U | 确认清空日志 | 删除旧日志，保留 LOG_CLEAR 摘要和清理数量 |
+| LOG-016 | P1/A,U | 未确认清空 | 请求被拒绝，日志不删除，并记录失败操作 |
+| LOG-017 | P1/U | 查看级别标识 | info 绿色、warn 黄色、error 红色，且均有级别文字 |
+| LOG-018 | P1/U | 原始为空、筛选无结果、加载失败 | 展示不同状态，筛选变化后回第 1 页 |
+| LOG-019 | P0/A | 同一次失败请求产生系统和审计日志 | correlationId 相同，可关联查看 |
+| LOG-020 | P1/A | 查询不存在的日志详情 | 返回 404，不泄漏其他记录或内部数据 |
+
+## 9. 完成标准
 
 - 两种 Method 各有完整签发和验签自动化旅程；
 - 所有允许及禁止的状态转换均有自动化断言；
 - 每个验签检查项都有通过和失败场景；
 - 八组分页边界全部自动化；
 - 全量结果为 0 failed、0 skipped、0 todo。
+- LOG-001 至 LOG-020 全部通过，`logs.json` 和日志 API 不包含敏感数据。

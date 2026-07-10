@@ -24,6 +24,7 @@
 5. 管理 VC 的暂停、恢复、更新/重新签发、过期和撤销；
 6. 区分密码学签名有效、DID 当前可用和 VC 当前可接受；
 7. 对 DID、VC、验签记录提供模糊搜索、稳定倒序和分页。
+8. 通过独立日志中心查看业务操作与系统运行的成功、失败和异常记录。
 
 ## 3. 产品边界
 
@@ -37,6 +38,7 @@
 - 客户端：本地浏览器管理和演示页面；
 - 操作审计：生命周期变更时间、版本及验签日志；
 - 自动化测试：服务、API、前端纯函数和端到端主流程。
+- 日志：操作审计日志、系统运行日志、组合查询、脱敏详情和留存清理。
 
 ### 3.2 不在本期范围
 
@@ -353,7 +355,122 @@ active|suspended -> expired（由时间判定）
 - 首页禁用上一页，末页禁用下一页。
 - 搜索输入应防止频繁请求，可在提交时搜索或使用 200–400ms 防抖。
 
-## 13. API 契约
+### UI-FR-005 日志中心
+
+- 主导航必须增加独立“日志中心”入口。
+- 列表显示发生时间、类型、级别、模块、操作、对象、结果和摘要。
+- `info` 使用绿色，`warn` 使用黄色，`error` 使用红色；颜色不得作为唯一标识，必须同时显示级别文字。
+- 日志详情显示关联 ID、错误码和脱敏后的结构化上下文。
+- 支持类型、结果、级别、模块、起止时间和模糊文本组合筛选。
+- 修改任一筛选条件后回到第 1 页；支持 10/20/50 页大小和前后翻页。
+- 提供“清空日志”操作并要求二次确认；普通日志不得编辑或单条删除。
+- 原始为空、筛选无结果和加载失败必须显示不同状态。
+
+## 13. 日志模块需求
+
+### LOG-FR-001 日志类型与范围
+
+系统必须记录两类结构化日志：
+
+1. `audit` 操作审计日志：DID 创建、更新、轮换、停用；VC 签发、暂停、恢复、替代、撤销、验签；演示数据重置；日志清理。
+2. `system` 系统运行日志：JSON 解析失败、未知路由、请求体超限、存储读写异常、未捕获服务异常及其他运行错误。
+
+成功和失败均必须记录。一次 API 请求必须生成 `correlationId`，同一请求产生的系统日志与审计日志使用相同关联 ID。
+
+### LOG-FR-002 统一结构化日志服务
+
+所有模块必须通过 `LogService` 写入日志，不得直接修改 `logs.json`。推荐接口：
+
+```js
+log(entry)
+info(entry)
+warn(entry)
+error(entry)
+query(filters)
+clear(actorContext)
+```
+
+- 业务服务负责产生操作语义与审计结果。
+- HTTP、JSON 解析和存储边界负责产生系统事件。
+- 日志服务不得反向调用业务服务，避免循环依赖。
+- 日志写入失败不得覆盖或改变原业务响应，但必须使用 `console.error` 兜底。
+
+### LOG-FR-003 级别与颜色
+
+| 级别 | 使用场景 | UI 标识 |
+|---|---|---|
+| `info` | 正常成功操作、正常启动或完成事件 | 绿色 + INFO |
+| `warn` | 业务规则拒绝、非法状态转换、参数错误、未知资源等预期失败 | 黄色 + WARN |
+| `error` | 存储异常、未捕获异常和非预期系统失败 | 红色 + ERROR |
+
+`success` 与 `level` 是独立字段，例如被业务规则拒绝的操作记录为 `success=false`、`level=warn`。
+
+### LOG-FR-004 数据模型
+
+```json
+{
+  "id": "uuid",
+  "occurredAt": "ISO-8601",
+  "correlationId": "uuid",
+  "type": "audit",
+  "level": "info",
+  "module": "DID",
+  "action": "DID_CREATE",
+  "success": true,
+  "targetType": "DID",
+  "targetId": "did:example:...",
+  "targetName": "可信学习中心",
+  "errorCode": null,
+  "message": "DID 创建成功",
+  "context": { "method": "example", "role": "issuer" }
+}
+```
+
+强制枚举：type 为 `audit|system`；level 为 `info|warn|error`；module 为 `DID|VC|VERIFY|API|STORE|SYSTEM`。`action` 使用稳定的大写下划线标识符，页面另行映射中文名称。
+
+### LOG-FR-005 脱敏
+
+日志服务必须在持久化前递归脱敏，不依赖调用者主动删除字段。至少屏蔽：
+
+- `privateJwk` 和任何私钥材料；
+- `proofValue`、签名字节和完整 proof；
+- 完整 VC JSON和完整请求体；
+- authorization、cookie、token、password、secret；
+- 名称包含 private、secret、token、password 的其他字段。
+
+脱敏值统一为 `[REDACTED]`。允许记录 DID、VC ID、Method、角色、状态、密钥版本、字段名和稳定错误码。
+
+### LOG-FR-006 存储与留存
+
+- 日志独立保存至 `data/logs.json`，不得与 DID/VC 业务状态共用文件。
+- 最多保留 5,000 条；写入第 5,001 条时删除最旧记录。
+- 默认按 occurredAt 降序，同一时间按 id 降序。
+- 演示数据重置不得删除日志，必须新增 `DEMO_RESET` 审计日志。
+- 清空日志必须二次确认。清空后保留一条 `LOG_CLEAR` 审计摘要并记录被清理数量，不保存被清理内容。
+- 日志只允许查询和整体清理，不允许编辑或单条删除。
+
+### LOG-FR-007 查询
+
+- 模糊搜索字段：action、targetId、targetName、errorCode、message；忽略大小写和首尾空格。
+- 精确筛选字段：type、success、level、module。
+- 时间范围为 `startTime <= occurredAt <= endTime`；开始晚于结束返回参数错误。
+- 不同筛选条件按 AND 组合，模糊搜索字段内部按 OR 匹配。
+- 默认 page=1、pageSize=10，仅允许 10、20、50。
+
+### LOG-FR-008 必记操作
+
+| 模块 | action |
+|---|---|
+| DID | `DID_CREATE`、`DID_UPDATE`、`DID_ROTATE_KEY`、`DID_DEACTIVATE` |
+| VC | `VC_ISSUE`、`VC_SUSPEND`、`VC_RESUME`、`VC_REPLACE`、`VC_REVOKE` |
+| VERIFY | `VC_VERIFY` |
+| API | `REQUEST_INVALID_JSON`、`REQUEST_TOO_LARGE`、`ROUTE_NOT_FOUND` |
+| STORE | `STORE_READ_FAILED`、`STORE_WRITE_FAILED` |
+| SYSTEM | `DEMO_RESET`、`LOG_CLEAR`、`UNEXPECTED_ERROR` |
+
+失败日志必须包含稳定 `errorCode`，但不得把完整异常堆栈写入公开日志详情。
+
+## 14. API 契约
 
 | 方法与路径 | 用途 |
 |---|---|
@@ -370,6 +487,9 @@ active|suspended -> expired（由时间判定）
 | `POST /api/credentials/:id/revoke` | 撤销 VC |
 | `POST /api/verify` | 验证 VC |
 | `GET /api/verification-logs` | 验签日志搜索分页列表 |
+| `GET /api/logs` | 日志组合筛选与分页列表 |
+| `GET /api/logs/:id` | 单条脱敏日志详情 |
+| `DELETE /api/logs` | 显式确认后清空并生成清理摘要 |
 
 错误响应统一为：
 
@@ -382,7 +502,7 @@ active|suspended -> expired（由时间判定）
 
 建议状态码：参数或状态转换错误 400，未找到 404，版本冲突 409，请求体超过 1MB 为 413，未知接口 404。
 
-## 14. 安全与隐私要求
+## 15. 安全与隐私要求
 
 - 当前及历史私钥不得出现在公开 API、页面、日志、错误消息或 Git 版本库。
 - 签名必须使用稳定、确定性的序列化载荷；proof 不参与自身签名。
@@ -391,8 +511,10 @@ active|suspended -> expired（由时间判定）
 - 所有用户输入在 HTML 中展示前必须转义。
 - 本地 JSON 存储不是生产密钥设施，文档必须保持该限制声明。
 - 生命周期操作必须通过版本检查避免静默并发覆盖。
+- 日志必须在写入磁盘前递归脱敏；公开查询不得存在未脱敏版本。
+- 日志清理请求必须包含 `{ "confirm": true }`。
 
-## 15. 非功能需求
+## 16. 非功能需求
 
 - Node.js 版本不低于 20。
 - 不增加第三方运行时依赖；测试可继续使用 `node:test`。
@@ -400,15 +522,17 @@ active|suspended -> expired（由时间判定）
 - 页面刷新和服务重启后，持久化状态、排序和生命周期关系不得丢失。
 - 新模块按单一职责拆分，DID Method、VC 业务、查询分页和 UI 状态不得混为一个模块。
 - 错误信息使用中文且明确指出失败对象和原因。
+- 日志查询不得读取私钥文件拼装详情；5,000 条规模下分页和组合筛选必须保持可用。
 
-## 16. 兼容与迁移
+## 17. 兼容与迁移
 
 - 旧数据若仅含 `did:key` 且无 method/capabilities，加载时必须兼容推导为 method=key、三个生命周期能力=false。
 - 新创建 DID 默认 example，但不得静默改写历史 key DID。
 - 现有 VC 若无 keyVersion，应按兼容规则解析版本 1；新签发 VC 必须写入 keyVersion。
 - 重置演示数据应创建至少一个 example Issuer、一个 key Holder 和一张可正常验证的混合 VC。
+- `logs.json` 不存在时自动初始化；文件损坏时不得覆盖原文件，应返回日志存储不可用并通过控制台兜底。
 
-## 17. 验收与完成定义
+## 18. 验收与完成定义
 
 实现 Agent 只有同时满足以下条件才能声明完成：
 
@@ -424,8 +548,12 @@ active|suspended -> expired（由时间判定）
 10. `git diff --check` 无格式错误；
 11. README、测试说明、Method 选型说明与实际行为一致；
 12. 人工完成六条端到端验收旅程。
+13. 全部必记 action 具有成功或失败日志测试，组合筛选结果正确；
+14. 第 5,001 条写入后仅保留最新 5,000 条；重置不清日志，清空后保留一条摘要；
+15. 私钥、proofValue、token 和完整 VC 不得出现在 `logs.json` 或日志 API；
+16. 日志 UI 的 info/warn/error 同时具有绿/黄/红颜色和文字标识。
 
-## 18. 实现 Agent 约束
+## 19. 实现 Agent 约束
 
 - 不得通过修改测试预期来掩盖与本文冲突的实现。
 - 不得把 `did:key` 当作可更新注册表 DID。
@@ -433,4 +561,6 @@ active|suspended -> expired（由时间判定）
 - 不得把 VC 更新实现为原地修改已签名 JSON。
 - 不得仅因签名通过就返回 VC 整体有效。
 - 不得为方便前端而一次性返回无上限的全部列表数据。
+- 不得在业务模块直接写 `logs.json`，不得因日志写入失败改变原业务响应。
+- 不得把控制台原始异常、完整请求体或完整 VC 直接作为公开日志详情。
 - 如实现决策与本文存在冲突，必须先更新需求并获得确认，再修改代码。
