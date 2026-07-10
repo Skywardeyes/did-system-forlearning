@@ -38,7 +38,12 @@
 
 ## 4. 本项目的选择
 
-项目采用本地注册表型教学 DID：
+第一阶段同时支持两种 DID Method，由用户在创建时选择：
+
+- `did:example`：默认选项，用于演示完整生命周期；
+- `did:key`：用于演示无注册表身份、直接解析和生命周期限制。
+
+`did:example` 使用以下格式：
 
 ```text
 did:example:<uuid>
@@ -52,11 +57,42 @@ did:example:<uuid>
 - DID 解析由项目本地服务完成；
 - `did:example` 明确表示示例用途，不宣称具备生产互操作能力。
 
+`did:key` 保持规范语义，仅支持创建、解析、签名和验签。系统不得为其提供信息更新、密钥轮换或停用操作。
+
 示例：
 
 ```text
 did:example:550e8400-e29b-41d4-a716-446655440000
 ```
+
+### 4.1 统一能力声明
+
+每条 DID 的公开响应包含 Method 和能力声明：
+
+```json
+{
+  "method": "example",
+  "capabilities": {
+    "update": true,
+    "rotateKey": true,
+    "deactivate": true
+  }
+}
+```
+
+`did:key` 的三个生命周期能力均为 `false`。前端依据能力声明显示或禁用按钮，不根据 Method 名称自行推断。
+
+### 4.2 适配器边界
+
+第一阶段实现统一 Method 注册表与两个适配器：
+
+```text
+DidMethodRegistry
+├── ExampleDidAdapter
+└── KeyDidAdapter
+```
+
+签发和验签服务根据 DID 前缀选择适配器。Issuer 与 Holder 可以使用不同 Method，Method 差异不得改变 VC 业务字段和验证结果结构。
 
 ## 5. 生命周期语义
 
@@ -169,3 +205,8 @@ resolveVerificationMethod(verificationMethodId, version)
 - 密钥轮换前后的 VC 均能找到正确公钥执行签名检查；
 - DID 停用后的历史 VC 显示“签名有效、DID 已停用、整体验证失败”；
 - 项目界面和文档明确标注 `did:example` 为非生产教学实现。
+- 创建页面提供 `did:example` 和 `did:key`，默认选中 `did:example`；
+- 两种 Method 均能作为 Issuer 或 Holder 完成正常签发与验签；
+- `did:key` 的更新、轮换和停用操作在 API 与界面层均不可用；
+- 混合 Method 的 Issuer/Holder 可以正常签发和验签；
+- 未知 Method 或 Method/DID 不一致时返回明确错误。
