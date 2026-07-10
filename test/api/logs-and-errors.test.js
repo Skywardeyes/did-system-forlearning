@@ -17,10 +17,10 @@ test('log API supports detail, filters and confirmed clear', async (t) => {
 
 test('protocol errors map invalid JSON, oversized body, unknown route and method', async (t) => {
   const app = await startTestApp(t);
-  const invalid = await fetch(`${app.url}/api/dids`, { method: 'POST', body: '{' });
+  const invalid = await fetch(`${app.url}/api/dids`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
   assert.equal(invalid.status, 400);
   assert.equal((await invalid.json()).code, 'REQUEST_INVALID_JSON');
-  const oversized = await fetch(`${app.url}/api/dids`, { method: 'POST', body: JSON.stringify({ value: 'x'.repeat(1024 * 1024 + 1) }) });
+  const oversized = await fetch(`${app.url}/api/dids`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ value: 'x'.repeat(1024 * 1024 + 1) }) });
   assert.equal(oversized.status, 413);
   assert.equal((await fetch(`${app.url}/api/not-found`)).status, 404);
   assert.equal((await fetch(`${app.url}/api/state`, { method: 'PUT' })).status, 404);

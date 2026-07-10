@@ -23,12 +23,24 @@ const contentTypes = {
   '.svg': 'image/svg+xml',
 };
 
+const securityHeaders = {
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+  'Referrer-Policy': 'no-referrer',
+  'X-Content-Type-Options': 'nosniff',
+};
+
 function sendJson(response, status, body) {
-  response.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8' });
+  response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8' });
   response.end(JSON.stringify(body));
 }
 
 async function readJson(request) {
+  const mediaType = String(request.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
+  if (mediaType !== 'application/json') {
+    const error = new Error('请求 Content-Type 必须是 application/json');
+    error.code = 'UNSUPPORTED_MEDIA_TYPE';
+    throw error;
+  }
   const chunks = [];
   let size = 0;
   for await (const chunk of request) {
@@ -126,19 +138,20 @@ async function serveStatic(response, pathname) {
   const requested = pathname === '/' ? '/index.html' : pathname;
   const filePath = path.resolve(publicRoot, `.${requested}`);
   if (!filePath.startsWith(`${publicRoot}${path.sep}`)) {
-    response.writeHead(403);
+    response.writeHead(403, securityHeaders);
     return response.end('Forbidden');
   }
   try {
     const content = await readFile(filePath);
     response.writeHead(200, {
+      ...securityHeaders,
       'Content-Type': contentTypes[path.extname(filePath)] || 'application/octet-stream',
       'Cache-Control': 'no-store',
     });
     response.end(content);
   } catch (error) {
     if (error.code !== 'ENOENT') throw error;
-    response.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
+    response.writeHead(404, { ...securityHeaders, 'Content-Type': 'text/plain; charset=utf-8' });
     response.end('页面不存在');
   }
 }
@@ -158,7 +171,7 @@ export function createAppServer(activeService = service, { logService = defaultL
     const code = error.code || (conflict ? 'VERSION_CONFLICT' : notFound ? 'NOT_FOUND' : 'INVALID_REQUEST');
     const level = ['REQUEST_INVALID_JSON', 'REQUEST_TOO_LARGE', 'NOT_FOUND'].includes(code) ? 'warn' : 'error';
     await logService[level]({ type: 'system', module: code.startsWith('STORE_') ? 'STORE' : 'API', action: code, success: false, correlationId, errorCode: code, message: error.message || '请求处理失败', context: { method: request.method, pathname: url.pathname } });
-    sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
+    sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : code === 'UNSUPPORTED_MEDIA_TYPE' ? 415 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
   }
 }); }
 

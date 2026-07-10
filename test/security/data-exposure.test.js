@@ -15,7 +15,7 @@ test('public APIs never expose private key material or stack paths', async (t) =
     const body = await (await fetch(`${app.url}${route}`)).json();
     assertNoSecrets(body, { allowProof: route === '/api/state' || route === '/api/credentials' });
   }
-  const error = await (await fetch(`${app.url}/api/dids`, { method: 'POST', body: '{' })).json();
+  const error = await (await fetch(`${app.url}/api/dids`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' })).json();
   assertNoSecrets(error);
 });
 
