@@ -119,4 +119,16 @@ Agent 一键执行全部测试：
 npm run test:all
 ```
 
-所有服务层和 HTTP 测试使用操作系统临时目录及随机端口，不读写 `data/store.json` 或 `data/logs.json`。Playwright 仅运行 Chromium；失败产物位于 `test-results/`，HTML 报告位于 `playwright-report/`。当前已知的稳定产品缺陷会保留失败断言，因此 `test:all` 仍会继续执行 UI 测试，最终统一返回非零退出码。详情见 [测试缺陷报告](docs/测试缺陷报告.md)。
+所有服务层和 HTTP 测试使用操作系统临时目录及随机端口，不读写 `data/store.json` 或 `data/logs.json`。Playwright 仅运行 Chromium；失败产物位于 `test-results/`，HTML 报告位于 `playwright-report/`。
+
+每次 `npm run test:all` 都会在本地创建测试记录：
+
+```text
+test-records/YYYY-MM-DD/YYYY-MM-DDTHH-mm-ss+08-00/
+  result.md
+  metadata.json
+  node.log
+  ui.log
+```
+
+`result.md` 包含测试时间、耗时、通过率、失败用例和简要分析；`metadata.json` 供 Agent 结构化读取；两个日志文件保存完整输出。测试失败时 Node 与 UI 仍会全部执行，最后返回非零退出码。测试记录已被 Git 忽略，仅保存在本机。缺陷修复与回归证据见 [测试缺陷报告](docs/测试缺陷报告.md)。
