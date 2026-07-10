@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { createDidIdentity, signCredential, verifyCredentialSignature } from './crypto.js';
+import { createDidIdentity, createDidKeyMaterial, signCredential, verifyCredentialSignature } from './crypto.js';
 import { publicDid } from './store.js';
 
 const VC_CONTEXT = ['https://www.w3.org/ns/credentials/v2'];
@@ -30,7 +30,76 @@ export class VcService {
 
     return this.store.update((state) => {
       const identity = createDidIdentity({ name, role });
+      Object.assign(identity, {
+        status: 'active',
+        version: 1,
+        updatedAt: identity.createdAt,
+        deactivatedAt: null,
+        serviceEndpoint: null,
+        keyHistory: [],
+      });
       state.dids.push(identity);
+      return publicDid(identity);
+    });
+  }
+
+  assertMutableDid(identity, expectedVersion) {
+    if (!identity) throw new Error('未找到指定 DID');
+    if (identity.status === 'deactivated') throw new Error('DID 已停用');
+    if (identity.version !== Number(expectedVersion)) throw new Error('DID 版本冲突');
+  }
+
+  async updateDid(id, input) {
+    return this.store.update((state) => {
+      const identity = state.dids.find((item) => item.id === id);
+      this.assertMutableDid(identity, input?.expectedVersion);
+      const name = input?.name?.trim();
+      if (name) identity.name = name;
+      if (input?.serviceEndpoint !== undefined) {
+        identity.serviceEndpoint = input.serviceEndpoint?.trim() || null;
+        if (identity.serviceEndpoint) {
+          identity.document.service = [{
+            id: `${identity.did}#service`,
+            type: 'LinkedDomains',
+            serviceEndpoint: identity.serviceEndpoint,
+          }];
+        } else {
+          delete identity.document.service;
+        }
+      }
+      identity.version += 1;
+      identity.updatedAt = new Date().toISOString();
+      return publicDid(identity);
+    });
+  }
+
+  async rotateDidKey(id, input) {
+    return this.store.update((state) => {
+      const identity = state.dids.find((item) => item.id === id);
+      this.assertMutableDid(identity, input?.expectedVersion);
+      const rotatedAt = new Date().toISOString();
+      identity.keyHistory.push({
+        version: identity.version,
+        verificationMethod: identity.document.assertionMethod[0],
+        publicJwk: identity.publicJwk,
+        privateJwk: identity.privateJwk,
+        retiredAt: rotatedAt,
+      });
+      identity.version += 1;
+      Object.assign(identity, createDidKeyMaterial(identity.did, identity.version));
+      identity.updatedAt = rotatedAt;
+      return publicDid(identity);
+    });
+  }
+
+  async deactivateDid(id, input) {
+    return this.store.update((state) => {
+      const identity = state.dids.find((item) => item.id === id);
+      this.assertMutableDid(identity, input?.expectedVersion);
+      identity.status = 'deactivated';
+      identity.version += 1;
+      identity.deactivatedAt = new Date().toISOString();
+      identity.updatedAt = identity.deactivatedAt;
       return publicDid(identity);
     });
   }

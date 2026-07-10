@@ -31,7 +31,7 @@ test('创建 DID 时公开数据不包含私钥，DID Document 可用于验证',
   const { service, issuer } = await fixture(t);
   const state = await service.getState();
 
-  assert.match(issuer.did, /^did:key:z6Mk/);
+  assert.match(issuer.did, /^did:example:[0-9a-f-]{36}$/);
   assert.equal('privateJwk' in issuer, false);
   assert.equal('privateJwk' in state.dids[0], false);
   assert.equal(issuer.document.id, issuer.did);
