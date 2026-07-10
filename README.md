@@ -92,3 +92,31 @@ data/store.json         本地运行数据（已被 Git 忽略）
 - [开发方案与任务拆解](docs/开发方案与任务拆解.md)
 - [测试与人工验收](docs/测试与人工验收.md)
 - [交付总结](docs/交付总结.md)
+
+## Agent 自动化测试
+
+首次安装测试依赖与 Chromium：
+
+```bash
+npm install
+npx playwright install chromium
+```
+
+分层执行：
+
+```bash
+npm run test:unit
+npm run test:integration
+npm run test:api
+npm run test:functional
+npm run test:security
+npm run test:ui
+```
+
+Agent 一键执行全部测试：
+
+```bash
+npm run test:all
+```
+
+所有服务层和 HTTP 测试使用操作系统临时目录及随机端口，不读写 `data/store.json` 或 `data/logs.json`。Playwright 仅运行 Chromium；失败产物位于 `test-results/`，HTML 报告位于 `playwright-report/`。当前已知的稳定产品缺陷会保留失败断言，因此 `test:all` 仍会继续执行 UI 测试，最终统一返回非零退出码。详情见 [测试缺陷报告](docs/测试缺陷报告.md)。

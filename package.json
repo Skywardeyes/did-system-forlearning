@@ -15,7 +15,7 @@
     "test:security": "node --test test/security",
     "test:node": "node test/run-node-tests.js",
     "test:ui": "playwright test",
-    "test:all": "npm run test:node && npm run test:ui"
+    "test:all": "node test/run-all-tests.js"
   },
   "engines": {
     "node": ">=20"
