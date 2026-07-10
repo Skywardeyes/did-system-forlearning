@@ -40,27 +40,48 @@ async function readJson(request) {
   }
 }
 
-async function handleApi(request, response, url) {
+async function handleApi(request, response, url, activeService) {
   if (request.method === 'GET' && url.pathname === '/api/state') {
-    return sendJson(response, 200, await service.getState());
+    return sendJson(response, 200, await activeService.getState());
   }
+  const query = { search: url.searchParams.get('search') || '', page: url.searchParams.get('page'), pageSize: url.searchParams.get('pageSize') };
+  if (request.method === 'GET' && url.pathname === '/api/dids') return sendJson(response, 200, await activeService.listDids(query));
+  if (request.method === 'GET' && url.pathname === '/api/credentials') return sendJson(response, 200, await activeService.listCredentials(query));
+  if (request.method === 'GET' && url.pathname === '/api/verification-logs') return sendJson(response, 200, await activeService.listVerificationLogs(query));
   if (request.method === 'POST' && url.pathname === '/api/dids') {
-    return sendJson(response, 201, await service.createDid(await readJson(request)));
+    return sendJson(response, 201, await activeService.createDid(await readJson(request)));
   }
   if (request.method === 'POST' && url.pathname === '/api/credentials') {
-    return sendJson(response, 201, await service.issueCredential(await readJson(request)));
+    return sendJson(response, 201, await activeService.issueCredential(await readJson(request)));
   }
   if (request.method === 'POST' && url.pathname === '/api/verify') {
     const body = await readJson(request);
-    return sendJson(response, 200, await service.verifyCredential(body.credential));
+    return sendJson(response, 200, await activeService.verifyCredential(body.credential));
   }
   if (request.method === 'POST' && url.pathname === '/api/demo/reset') {
-    return sendJson(response, 200, await service.resetDemo());
+    return sendJson(response, 200, await activeService.resetDemo());
+  }
+
+  const didAction = url.pathname.match(/^\/api\/dids\/([^/]+)(?:\/(rotate-key|deactivate))?$/);
+  if (didAction) {
+    const id = decodeURIComponent(didAction[1]);
+    const body = await readJson(request);
+    if (request.method === 'PATCH' && !didAction[2]) return sendJson(response, 200, await activeService.updateDid(id, body));
+    if (request.method === 'POST' && didAction[2] === 'rotate-key') return sendJson(response, 200, await activeService.rotateDidKey(id, body));
+    if (request.method === 'POST' && didAction[2] === 'deactivate') return sendJson(response, 200, await activeService.deactivateDid(id, body));
+  }
+
+  const vcAction = url.pathname.match(/^\/api\/credentials\/(.+)\/(suspend|resume|replace|revoke)$/);
+  if (request.method === 'POST' && vcAction) {
+    const id = decodeURIComponent(vcAction[1]);
+    const body = await readJson(request);
+    const methods = { suspend: 'suspendCredential', resume: 'resumeCredential', replace: 'replaceCredential', revoke: 'revokeCredential' };
+    return sendJson(response, 200, await activeService[methods[vcAction[2]]](id, body));
   }
 
   const revokeMatch = url.pathname.match(/^\/api\/credentials\/(.+)\/revoke$/);
   if (request.method === 'POST' && revokeMatch) {
-    return sendJson(response, 200, await service.revokeCredential(decodeURIComponent(revokeMatch[1])));
+    return sendJson(response, 200, await activeService.revokeCredential(decodeURIComponent(revokeMatch[1])));
   }
   return sendJson(response, 404, { error: '接口不存在' });
 }
@@ -86,16 +107,19 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export const server = createServer(async (request, response) => {
+export function createAppServer(activeService = service) { return createServer(async (request, response) => {
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   try {
-    if (url.pathname.startsWith('/api/')) await handleApi(request, response, url);
+    if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, activeService);
     else await serveStatic(response, url.pathname);
   } catch (error) {
-    console.error(error);
-    sendJson(response, 400, { error: error.message || '请求处理失败' });
+    const conflict = /\u7248\u672c\u51b2\u7a81/.test(error.message);
+    const notFound = /\u672a\u627e\u5230/.test(error.message);
+    sendJson(response, conflict ? 409 : notFound ? 404 : 400, { error: error.message || '请求处理失败', code: conflict ? 'VERSION_CONFLICT' : notFound ? 'NOT_FOUND' : 'INVALID_REQUEST' });
   }
-});
+}); }
+
+export const server = createAppServer(service);
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   server.listen(port, '127.0.0.1', () => {

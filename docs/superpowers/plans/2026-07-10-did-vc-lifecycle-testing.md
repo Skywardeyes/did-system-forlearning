@@ -11,6 +11,7 @@
 ## Global Constraints
 
 - DID 生命周期：创建、信息更新、密钥轮换、不可逆停用。
+- 第一阶段同时支持 `did:example` 和 `did:key`；只有 `did:example` 支持更新、轮换和停用。
 - VC 生命周期：`active <-> suspended -> replaced | expired | revoked`；过期、替代和撤销不可恢复。
 - DID 停用后禁止新签发；历史 VC 仍校验历史签名，但整体验证必须提示 DID 已停用。
 - 列表搜索忽略大小写和首尾空格，按任一字段包含完整搜索文本匹配。
@@ -23,6 +24,7 @@
 ## File Structure
 
 - `src/query.js`：纯函数实现搜索、稳定排序和分页，避免生命周期服务承担展示查询逻辑。
+- `src/did-methods.js`：Method 注册表、统一能力声明，以及 `did:example`、`did:key` 适配器。
 - `src/vc-service.js`：DID/VC 生命周期命令、状态约束、历史密钥解析和验签结论。
 - `src/server.js`：列表查询参数及 DID/VC 生命周期 HTTP 路由。
 - `public/list-ui.js`：可独立单测的列表查询状态与分页渲染函数。

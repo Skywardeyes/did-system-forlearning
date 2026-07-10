@@ -1,6 +1,9 @@
 import { completeDidCreation, renderDidCard } from './did-ui.js';
+import { applyListAction, createListState, renderPagination } from './list-ui.js';
 
 const state = { dids: [], credentials: [], verificationLogs: [], selectedCredential: null };
+const listStates = { did: createListState(), vc: createListState(), log: createListState() };
+const listMeta = { did: {}, vc: {}, log: {} };
 const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证' };
 
 const $ = (selector) => document.querySelector(selector);
@@ -36,8 +39,8 @@ function navigate(view) {
 }
 
 function render() {
-  $('#stat-dids').textContent = state.dids.length;
-  $('#stat-vcs').textContent = state.credentials.length;
+  $('#stat-dids').textContent = listMeta.did.total ?? state.dids.length;
+  $('#stat-vcs').textContent = listMeta.vc.total ?? state.credentials.length;
   $('#stat-active').textContent = state.credentials.filter((item) => item.status === 'active').length;
   $('#stat-checks').textContent = state.verificationLogs.length;
   $('#did-count').textContent = `${state.dids.length} 个身份`;
@@ -46,6 +49,10 @@ function render() {
   renderCredentials();
   renderLogs();
   renderSelects();
+  $('#did-pagination').innerHTML = renderPagination(listMeta.did);
+  $('#vc-pagination').innerHTML = renderPagination(listMeta.vc);
+  $('#log-pagination').innerHTML = renderPagination(listMeta.log);
+  bindPagination('did'); bindPagination('vc'); bindPagination('log');
 }
 
 function renderDids() {
@@ -59,6 +66,9 @@ function renderDids() {
     const identity = state.dids.find((item) => item.id === button.dataset.document);
     openJson(`${identity.name} · DID Document`, identity.document);
   }));
+  $$('[data-update-did]').forEach((button) => button.addEventListener('click', () => updateDid(button.dataset.updateDid)));
+  $$('[data-rotate-did]').forEach((button) => button.addEventListener('click', () => didAction(button.dataset.rotateDid, 'rotate-key', '密钥轮换成功')));
+  $$('[data-deactivate-did]').forEach((button) => button.addEventListener('click', () => didAction(button.dataset.deactivateDid, 'deactivate', 'DID 已停用', true)));
 }
 
 function renderCredentials() {
@@ -67,19 +77,20 @@ function renderCredentials() {
     tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无凭证，请先创建身份并签发</td></tr>';
     return;
   }
-  tbody.innerHTML = [...state.credentials].reverse().map((record) => `
+  tbody.innerHTML = state.credentials.map((record) => `
     <tr>
       <td><strong>${escapeHtml(record.credential.credentialSubject.name)}</strong><small title="${record.id}">${short(record.id, 18)}</small></td>
       <td>${escapeHtml(record.credential.credentialSubject.course)}</td>
       <td>${formatDate(record.issuedAt)}</td>
-      <td><span class="status ${record.status}">${record.status === 'revoked' ? '已撤销' : '有效'}</span></td>
-      <td><button class="table-action" data-open-vc="${record.id}">查看</button>${record.status === 'active' ? ` · <button class="table-action" data-revoke="${record.id}">撤销</button>` : ''}</td>
+      <td><span class="status ${record.status}">${escapeHtml(record.status)}</span></td>
+      <td><button class="table-action" data-open-vc="${record.id}">查看</button>${record.status === 'active' ? ` · <button class="table-action" data-vc-action="suspend" data-id="${record.id}">暂停</button> · <button class="table-action" data-vc-action="replace" data-id="${record.id}">更新</button> · <button class="table-action" data-revoke="${record.id}">撤销</button>` : record.status === 'suspended' ? ` · <button class="table-action" data-vc-action="resume" data-id="${record.id}">恢复</button> · <button class="table-action" data-vc-action="replace" data-id="${record.id}">更新</button> · <button class="table-action" data-revoke="${record.id}">撤销</button>` : ''}</td>
     </tr>`).join('');
   $$('[data-open-vc]').forEach((button) => button.addEventListener('click', () => {
     const record = state.credentials.find((item) => item.id === button.dataset.openVc);
     openJson('可验证凭证 VC', record.credential);
   }));
   $$('[data-revoke]').forEach((button) => button.addEventListener('click', () => revoke(button.dataset.revoke)));
+  $$('[data-vc-action]').forEach((button) => button.addEventListener('click', () => credentialAction(button.dataset.id, button.dataset.vcAction)));
 }
 
 function renderLogs() {
@@ -93,8 +104,8 @@ function renderSelects() {
   const fill = (selector, role, placeholder) => {
     const select = $(selector);
     const previous = select.value;
-    const items = state.dids.filter((item) => item.role === role);
-    select.innerHTML = `<option value="">${placeholder}</option>${items.map((item) => `<option value="${item.did}">${escapeHtml(item.name)} · ${short(item.did, 13)}</option>`).join('')}`;
+    const items = state.dids.filter((item) => item.role === role && item.status !== 'deactivated');
+    select.innerHTML = `<option value="">${placeholder}</option>${items.map((item) => `<option value="${item.did}">${escapeHtml(item.name)} · ${escapeHtml(item.method)} · ${short(item.did, 13)}</option>`).join('')}`;
     if (items.some((item) => item.did === previous)) select.value = previous;
     else if (items[0]) select.value = items[0].did;
   };
@@ -118,14 +129,50 @@ function escapeHtml(value) {
 }
 
 async function refresh() {
-  Object.assign(state, await api('/api/state'));
+  const base = await api('/api/state');
+  const load = (type, endpoint) => api(`${endpoint}?${new URLSearchParams(listStates[type])}`);
+  const [dids, credentials, logs] = await Promise.all([load('did', '/api/dids'), load('vc', '/api/credentials'), load('log', '/api/verification-logs')]);
+  Object.assign(state, base, { dids: dids.items, credentials: credentials.items, verificationLogs: logs.items });
+  Object.assign(listMeta.did, dids); Object.assign(listMeta.vc, credentials); Object.assign(listMeta.log, logs);
   render();
+}
+
+function bindPagination(type) {
+  const container = $(`#${type}-pagination`);
+  container.querySelector('[data-page="prev"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page - 1 }));
+  container.querySelector('[data-page="next"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page + 1 }));
+}
+
+async function changeList(type, action) { Object.assign(listStates[type], applyListAction(listStates[type], action)); await refresh(); }
+
+for (const type of ['did', 'vc', 'log']) {
+  $(`#${type}-search`).addEventListener('change', (event) => changeList(type, { type: 'search', value: event.target.value }));
+  $(`#${type}-page-size`).addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
 }
 
 async function revoke(id) {
   if (!confirm('撤销后该凭证将无法通过验证，确认继续？')) return;
   try { await api(`/api/credentials/${encodeURIComponent(id)}/revoke`, { method: 'POST' }); await refresh(); toast('凭证已撤销'); }
   catch (error) { toast(error.message, true); }
+}
+
+async function updateDid(id) {
+  const identity = state.dids.find((item) => item.id === id);
+  const name = prompt('请输入新名称', identity.name);
+  if (!name) return;
+  try { await api(`/api/dids/${id}`, { method: 'PATCH', body: JSON.stringify({ name, expectedVersion: identity.version }) }); await refresh(); toast('DID 更新成功'); } catch (error) { toast(error.message, true); }
+}
+
+async function didAction(id, action, message, confirmRequired = false) {
+  const identity = state.dids.find((item) => item.id === id);
+  if (confirmRequired && !confirm('停用不可恢复，确认继续？')) return;
+  try { await api(`/api/dids/${id}/${action}`, { method: 'POST', body: JSON.stringify({ expectedVersion: identity.version }) }); await refresh(); toast(message); } catch (error) { toast(error.message, true); }
+}
+
+async function credentialAction(id, action) {
+  const body = action === 'replace' ? { courseName: prompt('请输入更新后的课程名称') } : {};
+  if (action === 'replace' && !body.courseName) return;
+  try { await api(`/api/credentials/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: JSON.stringify(body) }); await refresh(); toast('凭证状态已更新'); } catch (error) { toast(error.message, true); }
 }
 
 $$('.nav-item').forEach((button) => button.addEventListener('click', () => navigate(button.dataset.view)));
@@ -165,7 +212,7 @@ $('#verify-button').addEventListener('click', async () => {
 });
 
 $('#load-latest').addEventListener('click', () => {
-  const latest = state.credentials.at(-1)?.credential;
+  const latest = state.credentials[0]?.credential;
   if (!latest) return toast('当前没有可载入的凭证', true);
   $('#verify-input').value = JSON.stringify(latest, null, 2);
   toast('已载入最新凭证');

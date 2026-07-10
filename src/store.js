@@ -39,7 +39,10 @@ export class JsonStore {
 
 export function publicDid(identity) {
   const { privateJwk, ...safeIdentity } = identity;
-  return safeIdentity;
+  return {
+    ...safeIdentity,
+    keyHistory: (safeIdentity.keyHistory || []).map(({ privateJwk: historicalPrivateKey, ...key }) => key),
+  };
 }
 
 export function publicCredential(record) {

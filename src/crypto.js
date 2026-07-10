@@ -40,20 +40,27 @@ export function stableStringify(value) {
 }
 
 export function createDidIdentity({ name, role }) {
-  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
-  const publicJwk = publicKey.export({ format: 'jwk' });
-  const privateJwk = privateKey.export({ format: 'jwk' });
-  const publicBytes = Buffer.from(publicJwk.x, 'base64url');
-  const fingerprint = `z${base58Encode(Buffer.concat([Buffer.from([0xed, 0x01]), publicBytes]))}`;
-  const did = `did:key:${fingerprint}`;
-  const verificationMethodId = `${did}#${fingerprint}`;
+  const id = randomUUID();
+  const did = `did:example:${id}`;
+  const keyMaterial = createDidKeyMaterial(did, 1);
 
   return {
-    id: randomUUID(),
+    id,
     name,
     role,
     did,
     createdAt: new Date().toISOString(),
+    ...keyMaterial,
+  };
+}
+
+export function createDidKeyMaterial(did, version) {
+  const { publicKey, privateKey } = generateKeyPairSync('ed25519');
+  const publicJwk = publicKey.export({ format: 'jwk' });
+  const privateJwk = privateKey.export({ format: 'jwk' });
+  const verificationMethodId = `${did}#key-${version}`;
+
+  return {
     publicJwk,
     privateJwk,
     document: {

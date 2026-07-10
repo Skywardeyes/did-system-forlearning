@@ -20,11 +20,14 @@ npm start
 
 ## 功能清单
 
-- 创建 Issuer 和 Holder 的 `did:key` 身份
+- 创建 Issuer 和 Holder 的 `did:example` 或 `did:key` 身份
+- `did:example` 支持更新、密钥轮换和不可逆停用；`did:key` 明确禁用这三类操作
 - 查看包含验证方法、公钥、认证和断言方法的 DID Document
 - 使用 Issuer 的 Ed25519 私钥签发培训结业 VC
 - 查看、复制 VC JSON 和签发台账
-- 分别验证格式、Issuer DID、签名、有效期和撤销状态
+- 分别验证格式、Issuer DID、DID 状态、密钥版本、签名、有效期和 VC 状态
+- VC 支持暂停、恢复、替代重签、过期和撤销
+- DID、VC 和验签日志支持搜索、稳定倒序和 10/20/50 条分页
 - 一键篡改姓名，展示签名验证失败
 - 撤销凭证并展示撤销检查失败
 - 保存最近验证记录
@@ -46,7 +49,7 @@ npm start
 npm test
 ```
 
-测试覆盖 DID 私钥隔离、原始 VC、姓名和课程篡改、未知 Issuer、过期及撤销场景。详细结果见 [测试与人工验收.md](docs/测试与人工验收.md)。
+测试覆盖两种 Method、DID/VC 生命周期、七项验签、搜索分页和六条端到端业务旅程。详细结果见 [测试与人工验收.md](docs/测试与人工验收.md)。
 
 ## 项目结构
 
