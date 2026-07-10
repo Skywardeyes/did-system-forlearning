@@ -37,6 +37,10 @@ export class VcService {
     if (logService) this.installAuditWrappers();
   }
 
+  withAuditContext(logService, correlationId) {
+    return new VcService(this.store, this.registry, { logService, correlationId });
+  }
+
   installAuditWrappers() {
     for (const [method, [action, module]] of Object.entries(AUDIT_ACTIONS)) {
       const operation = this[method].bind(this);

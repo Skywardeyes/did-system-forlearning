@@ -1,14 +1,18 @@
+import { randomUUID } from 'node:crypto';
 import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { JsonStore } from './store.js';
 import { VcService } from './vc-service.js';
+import { LogStore } from './log-store.js';
+import { LogService } from './log-service.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicRoot = path.join(root, 'public');
 const store = new JsonStore(process.env.DATA_FILE || path.join(root, 'data', 'store.json'));
 const service = new VcService(store);
+const defaultLogService = new LogService(new LogStore(process.env.LOG_FILE || path.join(root, 'data', 'logs.json')));
 const port = Number(process.env.PORT || 4173);
 
 const contentTypes = {
@@ -29,18 +33,49 @@ async function readJson(request) {
   let size = 0;
   for await (const chunk of request) {
     size += chunk.length;
-    if (size > 1024 * 1024) throw new Error('请求内容不能超过 1 MB');
+    if (size > 1024 * 1024) {
+      const error = new Error('请求内容不能超过 1 MB');
+      error.code = 'REQUEST_TOO_LARGE';
+      throw error;
+    }
     chunks.push(chunk);
   }
   if (!chunks.length) return {};
   try {
     return JSON.parse(Buffer.concat(chunks).toString('utf8'));
   } catch {
-    throw new Error('请求体不是有效的 JSON');
+    const error = new Error('请求体不是有效的 JSON');
+    error.code = 'REQUEST_INVALID_JSON';
+    throw error;
   }
 }
 
-async function handleApi(request, response, url, activeService) {
+async function handleApi(request, response, url, activeService, logService, correlationId) {
+  if (request.method === 'GET' && url.pathname === '/api/logs') {
+    return sendJson(response, 200, await logService.query({
+      search: url.searchParams.get('search') || '',
+      type: url.searchParams.get('type') || '',
+      success: url.searchParams.get('success') ?? '',
+      level: url.searchParams.get('level') || '',
+      module: url.searchParams.get('module') || '',
+      startTime: url.searchParams.get('startTime') || '',
+      endTime: url.searchParams.get('endTime') || '',
+      page: url.searchParams.get('page'),
+      pageSize: url.searchParams.get('pageSize'),
+    }));
+  }
+  const logDetail = url.pathname.match(/^\/api\/logs\/([^/]+)$/);
+  if (request.method === 'GET' && logDetail) {
+    const entry = await logService.get(decodeURIComponent(logDetail[1]));
+    if (!entry) {
+      const error = new Error('未找到指定日志'); error.code = 'NOT_FOUND'; throw error;
+    }
+    return sendJson(response, 200, entry);
+  }
+  if (request.method === 'DELETE' && url.pathname === '/api/logs') {
+    const body = await readJson(request);
+    return sendJson(response, 200, await logService.clear({ correlationId, confirm: body.confirm }));
+  }
   if (request.method === 'GET' && url.pathname === '/api/state') {
     return sendJson(response, 200, await activeService.getState());
   }
@@ -83,7 +118,8 @@ async function handleApi(request, response, url, activeService) {
   if (request.method === 'POST' && revokeMatch) {
     return sendJson(response, 200, await activeService.revokeCredential(decodeURIComponent(revokeMatch[1])));
   }
-  return sendJson(response, 404, { error: '接口不存在' });
+  await logService.warn({ type: 'system', module: 'API', action: 'ROUTE_NOT_FOUND', success: false, correlationId, errorCode: 'ROUTE_NOT_FOUND', message: '接口不存在', context: { method: request.method, pathname: url.pathname } });
+  return sendJson(response, 404, { error: '接口不存在', code: 'ROUTE_NOT_FOUND' });
 }
 
 async function serveStatic(response, pathname) {
@@ -107,15 +143,22 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export function createAppServer(activeService = service) { return createServer(async (request, response) => {
+export function createAppServer(activeService = service, { logService = defaultLogService } = {}) { return createServer(async (request, response) => {
+  const correlationId = randomUUID();
+  const requestService = activeService.withAuditContext
+    ? activeService.withAuditContext(logService, correlationId)
+    : activeService;
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   try {
-    if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, activeService);
+    if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, requestService, logService, correlationId);
     else await serveStatic(response, url.pathname);
   } catch (error) {
     const conflict = /\u7248\u672c\u51b2\u7a81/.test(error.message);
     const notFound = /\u672a\u627e\u5230/.test(error.message);
-    sendJson(response, conflict ? 409 : notFound ? 404 : 400, { error: error.message || '请求处理失败', code: conflict ? 'VERSION_CONFLICT' : notFound ? 'NOT_FOUND' : 'INVALID_REQUEST' });
+    const code = error.code || (conflict ? 'VERSION_CONFLICT' : notFound ? 'NOT_FOUND' : 'INVALID_REQUEST');
+    const level = ['REQUEST_INVALID_JSON', 'REQUEST_TOO_LARGE', 'NOT_FOUND'].includes(code) ? 'warn' : 'error';
+    await logService[level]({ type: 'system', module: code.startsWith('STORE_') ? 'STORE' : 'API', action: code, success: false, correlationId, errorCode: code, message: error.message || '请求处理失败', context: { method: request.method, pathname: url.pathname } });
+    sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
   }
 }); }
 
