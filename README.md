@@ -32,16 +32,21 @@ npm start
 - 撤销凭证并展示撤销检查失败
 - 保存最近验证记录
 - 私钥仅保存在本地 `data/store.json`，不会通过普通 API 返回
+- 独立日志中心记录操作审计与系统运行的成功、失败和异常
+- 日志支持组合筛选、10/20/50 分页、脱敏详情和 5,000 条留存上限
+- INFO/WARN/ERROR 分别使用绿色、黄色、红色并同时显示文字
 
 ## 演示流程
 
 1. 启动应用并载入演示数据。
 2. 在“DID 身份”查看 Issuer、Holder 和 DID Document。
 3. 在“凭证签发”查看已生成的 VC，或重新填写信息签发。
-4. 在“凭证验证”载入最新凭证，执行验证，确认五项全部通过。
+4. 在“凭证验证”载入最新凭证，执行验证，确认七项全部通过。
 5. 点击“模拟篡改姓名”，再次验证，观察 Ed25519 签名失败。
 6. 返回总览，在凭证台账撤销原始 VC。
 7. 重新载入该 VC 并验证，观察撤销状态失败。
+8. 打开“日志中心”，筛选 audit/system、成功/失败和日志级别，查看脱敏详情。
+9. 确认清空日志，观察仅保留 `LOG_CLEAR` 摘要。
 
 ## 测试
 
@@ -55,7 +60,10 @@ npm test
 
 ```text
 public/                 Web 演示操作台
+public/log-ui.js        日志筛选状态、级别标识和安全渲染
 src/crypto.js           did:key、稳定序列化、Ed25519 签名与验签
+src/log-store.js        独立日志文件原子存储与留存上限
+src/log-service.js      结构化日志、递归脱敏、查询与清空摘要
 src/store.js            JSON 本地存储及私钥脱敏
 src/vc-service.js       DID/VC 业务规则
 src/server.js           HTTP API 与静态资源服务
@@ -76,6 +84,7 @@ data/store.json         本地运行数据（已被 Git 忽略）
 |---|---|---|
 | `PORT` | `4173` | 本地 HTTP 服务端口 |
 | `DATA_FILE` | `data/store.json` | 本地数据文件路径 |
+| `LOG_FILE` | `data/logs.json` | 独立结构化日志文件路径 |
 
 相关材料：
 
