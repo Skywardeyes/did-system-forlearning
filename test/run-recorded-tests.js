@@ -63,7 +63,8 @@ async function readKnownFailureNames() {
   }
 }
 
-async function findPreviousMetadata(recordRoot, currentPath) {
+async function findHistory(recordRoot, currentPath) {
+  const records = [];
   try {
     const dates = (await readdir(recordRoot)).sort().reverse();
     for (const date of dates) {
@@ -73,16 +74,16 @@ async function findPreviousMetadata(recordRoot, currentPath) {
         const runPath = path.join(datePath, run);
         if (runPath === currentPath) continue;
         try {
-          return JSON.parse(await readFile(path.join(runPath, 'metadata.json'), 'utf8'));
+          records.push(JSON.parse(await readFile(path.join(runPath, 'metadata.json'), 'utf8')));
         } catch {
           // Continue to the next complete historical record.
         }
       }
     }
   } catch {
-    return null;
+    return { previous: null, baseline: null };
   }
-  return null;
+  return { previous: records[0] || null, baseline: records.at(-1) || null };
 }
 
 function environmentMetadata() {
@@ -128,13 +129,14 @@ export async function runRecordedTests({
   }
   const finishedDate = now();
   const finished = formatRunTime(finishedDate);
-  const previous = await findPreviousMetadata(recordRoot, runPath);
+  const history = await findHistory(recordRoot, runPath);
   const failures = knownFailures ?? await readKnownFailureNames();
   const analysis = buildAnalysis({
     node: results.node.stats,
     ui: results.ui.stats,
     knownFailures: failures,
-    previous: previous?.analysis || null,
+    previous: history.previous?.analysis || null,
+    baseline: history.baseline?.analysis || null,
   });
   const exitCode = Object.values(results).some((result) => result.exitCode !== 0) ? 1 : 0;
   const status = commandOutput('git', ['status', '--short']);

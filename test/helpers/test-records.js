@@ -42,7 +42,7 @@ export function parsePlaywright(output) {
   return { tests: parsed ? passed + failed + skipped : null, passed: parsed ? passed : null, failed: parsed ? failed : null, skipped: parsed ? skipped : null, todo: 0, failureNames, parsed };
 }
 
-export function buildAnalysis({ node, ui, knownFailures = [], previous = null }) {
+export function buildAnalysis({ node, ui, knownFailures = [], previous = null, baseline = null }) {
   const allFailures = [...(node.failureNames || []), ...(ui.failureNames || [])];
   const knownFailureNames = allFailures.filter((name) => knownFailures.some((known) => name.includes(known) || known.includes(name)));
   const newFailureNames = allFailures.filter((name) => !knownFailureNames.includes(name));
@@ -57,7 +57,10 @@ export function buildAnalysis({ node, ui, knownFailures = [], previous = null })
   const trend = previous
     ? `与上次相比，失败数由 ${previous.failed} 变为 ${failed}（变化 ${failureChange >= 0 ? '+' : ''}${failureChange}），通过率由 ${Number(previous.passRate).toFixed(2)}% 变为 ${passRate.toFixed(2)}%。`
     : '无历史记录可比较。';
-  return { total, passed, failed, passRate, knownFailureNames, newFailureNames, failureChange, summary, trend };
+  const baselineTrend = baseline
+    ? `与修复前基线相比，失败数由 ${baseline.failed} 变为 ${failed}，通过率由 ${Number(baseline.passRate).toFixed(2)}% 变为 ${passRate.toFixed(2)}%。`
+    : '无修复前基线可比较。';
+  return { total, passed, failed, passRate, knownFailureNames, newFailureNames, failureChange, summary, trend, baselineTrend };
 }
 
 function list(values) {
@@ -107,6 +110,8 @@ ${list(analysis.newFailureNames)}
 ${analysis.summary}
 
 ${analysis.trend}
+
+${analysis.baselineTrend || ''}
 
 ${analysis.newFailureNames.length ? '建议优先分析新增失败，确认是否为回归或测试基础设施问题。' : analysis.failed ? '失败均已匹配已知缺陷，建议按缺陷报告逐项修复。' : '未发现新增风险，可继续后续交付流程。'}
 `;

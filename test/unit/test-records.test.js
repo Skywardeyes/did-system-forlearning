@@ -48,6 +48,7 @@ test('analysis separates known and new failures and calculates pass rate', () =>
     ui: { tests: 2, passed: 2, failed: 0, skipped: 0, todo: 0, failureNames: [], parsed: true },
     knownFailures: ['known failure'],
     previous: { total: 6, failed: 4, passRate: 33.33 },
+    baseline: { total: 6, failed: 5, passRate: 16.67 },
   });
   assert.equal(analysis.total, 6);
   assert.equal(analysis.passed, 4);
@@ -55,6 +56,7 @@ test('analysis separates known and new failures and calculates pass rate', () =>
   assert.deepEqual(analysis.knownFailureNames, ['known failure']);
   assert.deepEqual(analysis.newFailureNames, ['new failure']);
   assert.equal(analysis.failureChange, -2);
+  assert.match(analysis.baselineTrend, /由 5 变为 2/);
 });
 
 test('Markdown includes time, stages, analysis and no environment secrets', () => {

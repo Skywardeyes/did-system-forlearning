@@ -47,7 +47,7 @@ test('GET /api/logs 支持组合筛选和分页', async (t) => {
 
 test('非法 JSON 和未知路由记录系统日志', async (t) => {
   const app = await fixture(t);
-  const invalid = await fetch(`${app.url}/api/dids`, { method: 'POST', body: '{' });
+  const invalid = await fetch(`${app.url}/api/dids`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
   const missing = await fetch(`${app.url}/api/not-found`);
   assert.equal(invalid.status, 400);
   assert.equal(missing.status, 404);
