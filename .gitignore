@@ -10,3 +10,4 @@ did-vc-dashboard.png
 playwright-report/
 test-results/
 .test-data/
+test-records/
