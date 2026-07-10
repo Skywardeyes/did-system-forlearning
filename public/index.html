@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>信证台 · DID/VC Learning Lab</title>
+    <meta name="description" content="本地 DID 与可验证凭证教学演示系统" />
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar">
+        <div class="brand">
+          <span class="brand-mark">信</span>
+          <div><strong>信证台</strong><small>DID / VC Learning Lab</small></div>
+        </div>
+        <nav aria-label="主导航">
+          <button class="nav-item active" data-view="overview"><span>总</span>运行总览</button>
+          <button class="nav-item" data-view="identities"><span>身</span>DID 身份</button>
+          <button class="nav-item" data-view="issue"><span>签</span>凭证签发</button>
+          <button class="nav-item" data-view="verify"><span>验</span>凭证验证</button>
+        </nav>
+        <div class="sidebar-foot">
+          <div class="local-state"><i></i>本地演示环境</div>
+          <button class="text-button" id="reset-demo">重置并载入演示数据</button>
+        </div>
+      </aside>
+
+      <main>
+        <header class="topbar">
+          <div><p class="eyebrow">TRAINING CREDENTIAL CONSOLE</p><h1 id="page-title">运行总览</h1></div>
+          <div class="top-status"><span>Ed25519</span><span>did:key</span><span id="clock"></span></div>
+        </header>
+
+        <section class="view active" id="view-overview">
+          <div class="stats-grid">
+            <article class="stat"><span>DID 身份</span><strong id="stat-dids">0</strong><small>Issuer 与 Holder</small></article>
+            <article class="stat"><span>已签发凭证</span><strong id="stat-vcs">0</strong><small>本地 VC 记录</small></article>
+            <article class="stat"><span>有效凭证</span><strong id="stat-active">0</strong><small>未撤销记录</small></article>
+            <article class="stat"><span>验证次数</span><strong id="stat-checks">0</strong><small>最近验证日志</small></article>
+          </div>
+          <div class="section-grid overview-grid">
+            <section class="panel flow-panel">
+              <div class="section-heading"><div><p>TRUST FLOW</p><h2>可信凭证闭环</h2></div></div>
+              <div class="trust-flow">
+                <div class="flow-node"><b>01</b><span>Issuer</span><small>创建机构 DID</small></div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node accent"><b>02</b><span>Issue VC</span><small>Ed25519 签名</small></div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node"><b>03</b><span>Holder</span><small>持有结业凭证</small></div>
+                <div class="flow-arrow">→</div>
+                <div class="flow-node green"><b>04</b><span>Verifier</span><small>独立逐项校验</small></div>
+              </div>
+            </section>
+            <section class="panel">
+              <div class="section-heading"><div><p>RECENT ACTIVITY</p><h2>最近验证</h2></div></div>
+              <div id="recent-logs" class="activity-list empty-state">暂无验证记录</div>
+            </section>
+          </div>
+          <section class="panel record-panel">
+            <div class="section-heading"><div><p>CREDENTIAL REGISTER</p><h2>凭证台账</h2></div><button class="button secondary" data-go="issue">＋ 签发凭证</button></div>
+            <div class="table-wrap"><table><thead><tr><th>凭证 / 学员</th><th>课程</th><th>签发时间</th><th>状态</th><th></th></tr></thead><tbody id="credential-table"></tbody></table></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-identities">
+          <div class="split-layout">
+            <section class="panel form-panel">
+              <div class="section-heading"><div><p>CREATE IDENTITY</p><h2>创建 DID 身份</h2></div></div>
+              <form id="did-form">
+                <label>身份名称<input name="name" required placeholder="例如：可信学习中心" /></label>
+                <fieldset><legend>身份角色</legend><div class="segmented"><label><input type="radio" name="role" value="issuer" checked /><span>Issuer 发行方</span></label><label><input type="radio" name="role" value="holder" /><span>Holder 持有人</span></label></div></fieldset>
+                <button class="button primary" type="submit">生成 DID 与密钥对</button>
+              </form>
+              <div class="note">私钥仅保存在本地数据文件中，页面和 API 只返回公钥。</div>
+            </section>
+            <section class="panel">
+              <div class="section-heading"><div><p>DID REGISTRY</p><h2>本地身份注册表</h2></div><span class="count" id="did-count">0 个身份</span></div>
+              <div id="did-list" class="identity-list empty-state">尚未创建 DID</div>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-issue">
+          <div class="split-layout wide-form">
+            <section class="panel form-panel">
+              <div class="section-heading"><div><p>ISSUE CREDENTIAL</p><h2>签发结业凭证</h2></div></div>
+              <form id="issue-form">
+                <label>发行方 DID<select name="issuerDid" id="issuer-select" required></select></label>
+                <label>持有人 DID<select name="holderDid" id="holder-select" required></select></label>
+                <div class="form-row"><label>学员姓名<input name="studentName" required placeholder="张晓明" /></label><label>完成日期<input name="completionDate" type="date" required /></label></div>
+                <label>课程名称<input name="courseName" required value="数字身份与可信凭证训练营" /></label>
+                <label>有效期至<input name="validUntil" type="datetime-local" required /></label>
+                <button class="button primary" type="submit">签名并签发 VC</button>
+              </form>
+            </section>
+            <section class="panel code-panel">
+              <div class="section-heading"><div><p>VC PREVIEW</p><h2>凭证 JSON</h2></div><button class="icon-button" id="copy-vc" title="复制凭证 JSON" aria-label="复制凭证 JSON">⧉</button></div>
+              <pre id="vc-preview">选择身份并签发凭证后，将在此显示完整 VC JSON。</pre>
+            </section>
+          </div>
+        </section>
+
+        <section class="view" id="view-verify">
+          <div class="verify-layout">
+            <section class="panel code-panel input-panel">
+              <div class="section-heading"><div><p>SUBMIT CREDENTIAL</p><h2>待验证 VC JSON</h2></div><div class="inline-actions"><button class="text-button" id="load-latest">载入最新凭证</button><button class="text-button danger-text" id="tamper-name">模拟篡改姓名</button></div></div>
+              <textarea id="verify-input" spellcheck="false" placeholder="在此粘贴 VC JSON"></textarea>
+              <button class="button primary" id="verify-button">执行完整验证</button>
+            </section>
+            <section class="panel result-panel">
+              <div class="section-heading"><div><p>VERIFICATION REPORT</p><h2>逐项验证报告</h2></div><span class="result-badge idle" id="result-badge">等待验证</span></div>
+              <div id="verify-results" class="check-list empty-state">提交凭证后，这里会展示格式、签发方、签名、有效期和撤销状态。</div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+    <div id="toast" role="status" aria-live="polite"></div>
+    <dialog id="json-dialog"><div class="dialog-head"><strong id="dialog-title">详情</strong><button class="icon-button" id="dialog-close" aria-label="关闭">×</button></div><pre id="dialog-json"></pre></dialog>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,8 @@
+node_modules/
+data/*.json
+!data/.gitkeep
+.env
+coverage/
+*.log
+.playwright-mcp/
+did-vc-dashboard.png
