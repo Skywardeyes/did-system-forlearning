@@ -1,3 +1,5 @@
+import { completeDidCreation } from './did-ui.js';
+
 const state = { dids: [], credentials: [], verificationLogs: [], selectedCredential: null };
 const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证' };
 
@@ -139,8 +141,9 @@ $('#holder-select').addEventListener('change', () => {
 
 $('#did-form').addEventListener('submit', async (event) => {
   event.preventDefault();
-  const body = Object.fromEntries(new FormData(event.currentTarget));
-  try { await api('/api/dids', { method: 'POST', body: JSON.stringify(body) }); event.currentTarget.reset(); await refresh(); toast('DID 身份创建成功'); }
+  const form = event.currentTarget;
+  const body = Object.fromEntries(new FormData(form));
+  try { await completeDidCreation({ form, body, api, refresh, notify: toast }); }
   catch (error) { toast(error.message, true); }
 });
 
