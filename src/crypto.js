@@ -25,7 +25,7 @@ export function base58Encode(bytes) {
     if (byte !== 0) break;
     leadingZeroes += 1;
   }
-  return '1'.repeat(leadingZeroes) + (encoded || '1');
+  return '1'.repeat(leadingZeroes) + encoded;
 }
 
 export function stableStringify(value) {
