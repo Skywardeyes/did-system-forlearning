@@ -20,3 +20,23 @@ test('日志筛选网格允许列收缩而不撑破面板', () => {
 test('窄屏导航为五个功能入口预留等宽列', () => {
   assert.match(css, /@media\s*\(max-width:\s*640px\)[\s\S]*nav\s*\{\s*grid-template-columns:\s*repeat\(5,\s*1fr\)/);
 });
+
+test('列表工具栏和分页栏与面板边缘保持统一留白', () => {
+  const tools = css.match(/\.list-tools\s*\{([^}]*)\}/)?.[1] || '';
+  const pagination = css.match(/\.pagination\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(tools, /padding:\s*12px\s+20px/);
+  assert.match(pagination, /padding:\s*0\s+20px\s+16px/);
+});
+
+test('文字操作按钮具有非零点击内边距', () => {
+  const textButton = css.match(/\.text-button\s*\{([^}]*)\}/)?.[1] || '';
+  const sidebarTextButton = css.match(/\.sidebar \.text-button\s*\{([^}]*)\}/)?.[1] || '';
+  const tableAction = css.match(/\.table-action\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(textButton, /padding:\s*6px\s+8px/);
+  assert.match(sidebarTextButton, /padding:\s*6px\s+8px/);
+  assert.match(tableAction, /padding:\s*6px\s+8px/);
+});
+
+test('窄屏导航按钮保留至少四像素水平留白', () => {
+  assert.match(css, /@media\s*\(max-width:\s*640px\)[\s\S]*\.nav-item,\s*\.nav-item\.active\s*\{[^}]*padding:\s*6px\s+4px/);
+});
