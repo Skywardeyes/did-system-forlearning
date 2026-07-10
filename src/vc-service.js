@@ -10,15 +10,75 @@ const VC_TRANSITIONS = {
   suspended: new Set(['active', 'replaced', 'revoked']),
   replaced: new Set(), expired: new Set(), revoked: new Set(),
 };
+const AUDIT_ACTIONS = {
+  createDid: ['DID_CREATE', 'DID'],
+  updateDid: ['DID_UPDATE', 'DID'],
+  rotateDidKey: ['DID_ROTATE_KEY', 'DID'],
+  deactivateDid: ['DID_DEACTIVATE', 'DID'],
+  issueCredential: ['VC_ISSUE', 'VC'],
+  suspendCredential: ['VC_SUSPEND', 'VC'],
+  resumeCredential: ['VC_RESUME', 'VC'],
+  replaceCredential: ['VC_REPLACE', 'VC'],
+  revokeCredential: ['VC_REVOKE', 'VC'],
+  verifyCredential: ['VC_VERIFY', 'VERIFY'],
+  resetDemo: ['DEMO_RESET', 'SYSTEM'],
+};
 
 function resultItem(key, label, passed, detail) {
   return { key, label, passed, detail };
 }
 
 export class VcService {
-  constructor(store, registry = new DidMethodRegistry()) {
+  constructor(store, registry = new DidMethodRegistry(), { logService = null, correlationId = null } = {}) {
     this.store = store;
     this.registry = registry;
+    this.logService = logService;
+    this.correlationId = correlationId;
+    if (logService) this.installAuditWrappers();
+  }
+
+  installAuditWrappers() {
+    for (const [method, [action, module]] of Object.entries(AUDIT_ACTIONS)) {
+      const operation = this[method].bind(this);
+      this[method] = async (...args) => {
+        try {
+          const result = await operation(...args);
+          const verificationFailed = method === 'verifyCredential' && !result.valid;
+          await this.logAudit(verificationFailed ? 'warn' : 'info', {
+            action,
+            module,
+            success: verificationFailed ? false : true,
+            ...this.auditTarget(method, args, result),
+            message: verificationFailed ? 'VC 验证未通过' : `${action} 操作成功`,
+          });
+          return result;
+        } catch (error) {
+          await this.logAudit('warn', {
+            action,
+            module,
+            success: false,
+            ...this.auditTarget(method, args, null),
+            errorCode: error.code || 'OPERATION_REJECTED',
+            message: error.message,
+          });
+          throw error;
+        }
+      };
+    }
+  }
+
+  auditTarget(method, args, result) {
+    if (method.startsWith('createDid')) {
+      return { targetType: 'DID', targetId: result?.did || null, targetName: result?.name || args[0]?.name || null, context: { method: result?.method || args[0]?.method || 'example', role: result?.role || args[0]?.role || null } };
+    }
+    if (method.includes('Did')) return { targetType: 'DID', targetId: result?.did || args[0] || null, targetName: result?.name || null, context: { version: result?.version || null } };
+    const targetId = method === 'verifyCredential' ? (result?.credentialId || args[0]?.id) : (result?.id || args[0]);
+    return { targetType: method === 'resetDemo' ? 'SYSTEM' : 'VC', targetId: targetId || null, targetName: null, context: method === 'verifyCredential' ? { failedChecks: result?.checks?.filter((item) => !item.passed).map((item) => item.key) || [] } : {} };
+  }
+
+  async logAudit(level, entry) {
+    if (!this.logService) return;
+    await this.logService[level]({ type: 'audit', correlationId: this.correlationId, ...entry });
   }
 
   async getState() {
