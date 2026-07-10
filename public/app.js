@@ -1,10 +1,13 @@
 import { completeDidCreation, renderDidCard } from './did-ui.js';
 import { applyListAction, createListState, renderPagination } from './list-ui.js';
+import { applyLogFilter, createLogFilters, renderLogRow } from './log-ui.js';
 
-const state = { dids: [], credentials: [], verificationLogs: [], selectedCredential: null };
+const state = { dids: [], credentials: [], verificationLogs: [], structuredLogs: [], selectedCredential: null };
 const listStates = { did: createListState(), vc: createListState(), log: createListState() };
 const listMeta = { did: {}, vc: {}, log: {} };
-const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证' };
+const structuredLogFilters = createLogFilters();
+const structuredLogMeta = {};
+const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证', logs: '日志中心' };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -48,11 +51,26 @@ function render() {
   renderDids();
   renderCredentials();
   renderLogs();
+  renderStructuredLogs();
   renderSelects();
   $('#did-pagination').innerHTML = renderPagination(listMeta.did);
   $('#vc-pagination').innerHTML = renderPagination(listMeta.vc);
   $('#log-pagination').innerHTML = renderPagination(listMeta.log);
   bindPagination('did'); bindPagination('vc'); bindPagination('log');
+}
+
+function renderStructuredLogs() {
+  const tbody = $('#structured-log-table');
+  tbody.innerHTML = state.structuredLogs.length
+    ? state.structuredLogs.map((entry) => renderLogRow(entry, { formatDate })).join('')
+    : '<tr><td colspan="6" class="empty-state">当前条件下没有日志</td></tr>';
+  $('#structured-log-pagination').innerHTML = renderPagination(structuredLogMeta);
+  $('#structured-log-pagination [data-page="prev"]')?.addEventListener('click', () => changeStructuredLogs({ type: 'page', value: structuredLogMeta.page - 1 }));
+  $('#structured-log-pagination [data-page="next"]')?.addEventListener('click', () => changeStructuredLogs({ type: 'page', value: structuredLogMeta.page + 1 }));
+  $$('[data-log-detail]').forEach((button) => button.addEventListener('click', async () => {
+    try { openJson('结构化日志详情', await api(`/api/logs/${encodeURIComponent(button.dataset.logDetail)}`)); }
+    catch (error) { toast(error.message, true); }
+  }));
 }
 
 function renderDids() {
@@ -131,10 +149,16 @@ function escapeHtml(value) {
 async function refresh() {
   const base = await api('/api/state');
   const load = (type, endpoint) => api(`${endpoint}?${new URLSearchParams(listStates[type])}`);
-  const [dids, credentials, logs] = await Promise.all([load('did', '/api/dids'), load('vc', '/api/credentials'), load('log', '/api/verification-logs')]);
-  Object.assign(state, base, { dids: dids.items, credentials: credentials.items, verificationLogs: logs.items });
+  const [dids, credentials, logs, structured] = await Promise.all([load('did', '/api/dids'), load('vc', '/api/credentials'), load('log', '/api/verification-logs'), api(`/api/logs?${new URLSearchParams(structuredLogFilters)}`)]);
+  Object.assign(state, base, { dids: dids.items, credentials: credentials.items, verificationLogs: logs.items, structuredLogs: structured.items });
   Object.assign(listMeta.did, dids); Object.assign(listMeta.vc, credentials); Object.assign(listMeta.log, logs);
+  Object.assign(structuredLogMeta, structured);
   render();
+}
+
+async function changeStructuredLogs(action) {
+  Object.assign(structuredLogFilters, applyLogFilter(structuredLogFilters, action));
+  await refresh();
 }
 
 function bindPagination(type) {
@@ -149,6 +173,16 @@ for (const type of ['did', 'vc', 'log']) {
   $(`#${type}-search`).addEventListener('change', (event) => changeList(type, { type: 'search', value: event.target.value }));
   $(`#${type}-page-size`).addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
 }
+
+for (const [id, type] of [['structured-log-search', 'search'], ['structured-log-type', 'type'], ['structured-log-success', 'success'], ['structured-log-level', 'level'], ['structured-log-module', 'module'], ['structured-log-start', 'startTime'], ['structured-log-end', 'endTime'], ['structured-log-page-size', 'pageSize']]) {
+  $(`#${id}`).addEventListener('change', (event) => changeStructuredLogs({ type, value: event.target.value }));
+}
+
+$('#clear-logs').addEventListener('click', async () => {
+  if (!confirm('清空后无法恢复，确认继续？')) return;
+  try { await api('/api/logs', { method: 'DELETE', body: JSON.stringify({ confirm: true }) }); await refresh(); toast('日志已清空并保留清理摘要'); }
+  catch (error) { toast(error.message, true); }
+});
 
 async function revoke(id) {
   if (!confirm('撤销后该凭证将无法通过验证，确认继续？')) return;

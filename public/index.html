@@ -20,6 +20,7 @@
           <button class="nav-item" data-view="identities"><span>身</span>DID 身份</button>
           <button class="nav-item" data-view="issue"><span>签</span>凭证签发</button>
           <button class="nav-item" data-view="verify"><span>验</span>凭证验证</button>
+          <button class="nav-item" data-view="logs"><span>志</span>日志中心</button>
         </nav>
         <div class="sidebar-foot">
           <div class="local-state"><i></i>本地演示环境</div>
@@ -115,6 +116,24 @@
               <div id="verify-results" class="check-list empty-state">提交凭证后，这里会展示格式、签发方、签名、有效期和撤销状态。</div>
             </section>
           </div>
+        </section>
+
+        <section class="view" id="view-logs">
+          <section class="panel record-panel">
+            <div class="section-heading"><div><p>STRUCTURED LOGS</p><h2>日志中心</h2></div><button class="text-button danger-text" id="clear-logs">清空日志</button></div>
+            <div class="log-filters">
+              <input id="structured-log-search" placeholder="搜索操作、对象或错误" />
+              <select id="structured-log-type"><option value="">全部类型</option><option value="audit">操作审计</option><option value="system">系统运行</option></select>
+              <select id="structured-log-success"><option value="">全部结果</option><option value="true">成功</option><option value="false">失败</option></select>
+              <select id="structured-log-level"><option value="">全部级别</option><option value="info">INFO</option><option value="warn">WARN</option><option value="error">ERROR</option></select>
+              <select id="structured-log-module"><option value="">全部模块</option><option>DID</option><option>VC</option><option>VERIFY</option><option>API</option><option>STORE</option><option>SYSTEM</option></select>
+              <input id="structured-log-start" type="datetime-local" aria-label="开始时间" />
+              <input id="structured-log-end" type="datetime-local" aria-label="结束时间" />
+              <select id="structured-log-page-size"><option>10</option><option>20</option><option>50</option></select>
+            </div>
+            <div class="table-wrap"><table><thead><tr><th>时间</th><th>级别 / 类型</th><th>操作 / 模块</th><th>结果 / 对象</th><th>摘要</th><th></th></tr></thead><tbody id="structured-log-table"><tr><td colspan="6" class="empty-state">暂无日志</td></tr></tbody></table></div>
+            <div id="structured-log-pagination"></div>
+          </section>
         </section>
       </main>
     </div>

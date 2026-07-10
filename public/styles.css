@@ -68,3 +68,12 @@ dialog { width: min(820px, calc(100vw - 32px)); max-height: 82vh; padding: 0; bo
 .list-tools { display: flex; gap: .75rem; margin: .75rem 0; }
 .list-tools input { flex: 1; }
 .pagination { display: flex; justify-content: flex-end; align-items: center; gap: .75rem; margin-top: .75rem; }
+.log-filters { display: grid; grid-template-columns: minmax(180px,2fr) repeat(7,minmax(100px,1fr)); gap: 8px; padding: 12px 20px; border-bottom: 1px solid var(--line); }
+.log-filters input, .log-filters select { min-width: 0; }
+.log-level { display: inline-block; margin-right: 7px; padding: 3px 7px; border: 1px solid currentColor; font-size: 9px; font-weight: 800; letter-spacing: .05em; }
+.log-level.info { color: #147a48; background: #e8f7ef; }
+.log-level.warn { color: #8a6200; background: #fff4c7; }
+.log-level.error { color: #b4232f; background: #fdebec; }
+.log-level.unknown { color: var(--muted); background: #f1f2f2; }
+@media (max-width: 1000px) { .log-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 640px) { nav { grid-template-columns: repeat(5,1fr); }.log-filters { grid-template-columns: 1fr; padding-inline: 12px; } }
