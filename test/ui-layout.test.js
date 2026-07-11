@@ -15,6 +15,15 @@ test('all list searches have labels, fuzzy-search hints, clear controls and subm
   assert.doesNotMatch(html, /<select id="structured-log-page-size"/);
 });
 
+test('search and page-size controls use the requested target widths', () => {
+  const searchButton = css.match(/\.search-submit\s*\{([^}]*)\}/)?.[1] || '';
+  const pageSize = css.match(/\.page-size-select\s*\{([^}]*)\}/)?.[1] || '';
+  const clear = css.match(/\.search-clear\s*\{([^}]*)\}/)?.[1] || '';
+  assert.match(searchButton, /width:\s*70px/);
+  assert.match(pageSize, /width:\s*80px/);
+  assert.match(clear, /position:\s*absolute/);
+});
+
 test('隐藏的分段单选框不继承全宽输入框尺寸', () => {
   const rule = css.match(/\.segmented input\s*\{([^}]*)\}/)?.[1] || '';
   assert.match(rule, /width:\s*1px/);
