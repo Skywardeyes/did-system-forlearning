@@ -53,9 +53,9 @@ function render() {
   renderLogs();
   renderStructuredLogs();
   renderSelects();
-  $('#did-pagination').innerHTML = renderPagination(listMeta.did);
-  $('#vc-pagination').innerHTML = renderPagination(listMeta.vc);
-  $('#log-pagination').innerHTML = renderPagination(listMeta.log);
+  $('#did-pagination').innerHTML = renderPagination(listMeta.did, { id: 'did', pageSize: listStates.did.pageSize });
+  $('#vc-pagination').innerHTML = renderPagination(listMeta.vc, { id: 'vc', pageSize: listStates.vc.pageSize });
+  $('#log-pagination').innerHTML = renderPagination(listMeta.log, { id: 'log', pageSize: listStates.log.pageSize });
   bindPagination('did'); bindPagination('vc'); bindPagination('log');
 }
 
@@ -64,9 +64,10 @@ function renderStructuredLogs() {
   tbody.innerHTML = state.structuredLogs.length
     ? state.structuredLogs.map((entry) => renderLogRow(entry, { formatDate })).join('')
     : '<tr><td colspan="6" class="empty-state">当前条件下没有日志</td></tr>';
-  $('#structured-log-pagination').innerHTML = renderPagination(structuredLogMeta);
+  $('#structured-log-pagination').innerHTML = renderPagination(structuredLogMeta, { id: 'structured-log', pageSize: structuredLogFilters.pageSize });
   $('#structured-log-pagination [data-page="prev"]')?.addEventListener('click', () => changeStructuredLogs({ type: 'page', value: structuredLogMeta.page - 1 }));
   $('#structured-log-pagination [data-page="next"]')?.addEventListener('click', () => changeStructuredLogs({ type: 'page', value: structuredLogMeta.page + 1 }));
+  $('#structured-log-page-size')?.addEventListener('change', (event) => changeStructuredLogs({ type: 'pageSize', value: event.target.value }));
   $$('[data-log-detail]').forEach((button) => button.addEventListener('click', async () => {
     try { openJson('结构化日志详情', await api(`/api/logs/${encodeURIComponent(button.dataset.logDetail)}`)); }
     catch (error) { toast(error.message, true); }
@@ -165,16 +166,36 @@ function bindPagination(type) {
   const container = $(`#${type}-pagination`);
   container.querySelector('[data-page="prev"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page - 1 }));
   container.querySelector('[data-page="next"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page + 1 }));
+  container.querySelector(`#${type}-page-size`)?.addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
 }
 
 async function changeList(type, action) { Object.assign(listStates[type], applyListAction(listStates[type], action)); await refresh(); }
 
-for (const type of ['did', 'vc', 'log']) {
-  $(`#${type}-search`).addEventListener('change', (event) => changeList(type, { type: 'search', value: event.target.value }));
-  $(`#${type}-page-size`).addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
+function bindSearchControls(prefix, submit) {
+  const input = $(`#${prefix}-search`);
+  const clear = $(`#${prefix}-search-clear`);
+  const syncClear = () => { clear.hidden = input.value.length === 0; };
+  input.addEventListener('input', syncClear);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') { event.preventDefault(); submit(input.value); }
+  });
+  $(`#${prefix}-search-submit`).addEventListener('click', () => submit(input.value));
+  clear.addEventListener('click', () => {
+    input.value = '';
+    syncClear();
+    input.focus();
+    submit('');
+  });
+  syncClear();
 }
 
-for (const [id, type] of [['structured-log-search', 'search'], ['structured-log-type', 'type'], ['structured-log-success', 'success'], ['structured-log-level', 'level'], ['structured-log-module', 'module'], ['structured-log-start', 'startTime'], ['structured-log-end', 'endTime'], ['structured-log-page-size', 'pageSize']]) {
+for (const type of ['did', 'vc', 'log']) {
+  bindSearchControls(type, (value) => changeList(type, { type: 'search', value }));
+}
+
+bindSearchControls('structured-log', (value) => changeStructuredLogs({ type: 'search', value }));
+
+for (const [id, type] of [['structured-log-type', 'type'], ['structured-log-success', 'success'], ['structured-log-level', 'level'], ['structured-log-module', 'module'], ['structured-log-start', 'startTime'], ['structured-log-end', 'endTime']]) {
   $(`#${id}`).addEventListener('change', (event) => changeStructuredLogs({ type, value: event.target.value }));
 }
 

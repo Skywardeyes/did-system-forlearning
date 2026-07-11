@@ -37,3 +37,27 @@ test('mobile viewport has no horizontal page overflow and navigation stays usabl
   await page.locator('[data-view="logs"]').click();
   await expect(page.locator('#view-logs')).toBeVisible();
 });
+
+test('list search submits explicitly, clears in one click and changes page size', async ({ page }) => {
+  await page.locator('[data-view="identities"]').click();
+  const input = page.locator('#did-search');
+  await input.fill('不存在的身份');
+  await expect(page.locator('#did-list')).not.toContainText('尚未创建 DID');
+  await expect(page.locator('#did-search-clear')).toBeVisible();
+  await page.locator('#did-search-submit').click();
+  await expect(page.locator('#did-list')).toContainText('尚未创建 DID');
+  await page.locator('#did-search-clear').click();
+  await expect(input).toHaveValue('');
+  await expect(page.locator('#did-search-clear')).toBeHidden();
+  await expect(page.locator('#did-list')).not.toContainText('尚未创建 DID');
+  await page.locator('#did-page-size').selectOption('20');
+  await expect(page.locator('#did-page-size')).toHaveValue('20');
+  await expect(page.locator('#did-pagination .page-summary')).toContainText('1/1 页');
+});
+
+test('structured logs use the same labeled search controls', async ({ page }) => {
+  await page.locator('[data-view="logs"]').click();
+  await expect(page.locator('label[for="structured-log-search"]')).toHaveText('搜索');
+  await expect(page.locator('#structured-log-search')).toHaveAttribute('placeholder', '支持模糊搜索');
+  await expect(page.locator('#structured-log-page-size')).toBeVisible();
+});
