@@ -3,6 +3,17 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 const css = await readFile(new URL('../public/styles.css', import.meta.url), 'utf8');
+const html = await readFile(new URL('../public/index.html', import.meta.url), 'utf8');
+
+test('all list searches have labels, fuzzy-search hints, clear controls and submit buttons', () => {
+  for (const id of ['did', 'vc', 'log', 'structured-log']) {
+    assert.match(html, new RegExp(`<label[^>]+for="${id}-search"[^>]*>搜索</label>`));
+    assert.match(html, new RegExp(`id="${id}-search"[^>]+placeholder="支持模糊搜索"`));
+    assert.match(html, new RegExp(`id="${id}-search-clear"[^>]+aria-label="清除搜索内容"`));
+    assert.match(html, new RegExp(`id="${id}-search-submit"[^>]*>搜索</button>`));
+  }
+  assert.doesNotMatch(html, /<select id="structured-log-page-size"/);
+});
 
 test('隐藏的分段单选框不继承全宽输入框尺寸', () => {
   const rule = css.match(/\.segmented input\s*\{([^}]*)\}/)?.[1] || '';
