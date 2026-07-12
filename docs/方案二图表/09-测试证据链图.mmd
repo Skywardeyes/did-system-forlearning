@@ -1,0 +1,13 @@
+flowchart LR
+    Run["npm run test:evidence"] --> Node["执行全部 Node 测试"]
+    Run --> UI["执行 Chromium UI 测试"]
+    Node --> Record["创建永久测试批次"]
+    UI --> Record
+    Record --> Raw["node.log / ui.log"]
+    Record --> Report["result.md / metadata.json / test-cases.json"]
+    Record --> Browser["playwright-report / test-results"]
+    Raw --> Manifest["evidence-manifest.json + checksums.sha256"]
+    Report --> Manifest
+    Browser --> Manifest
+    Manifest --> Verify["test:evidence:verify 校验缺失、新增和篡改"]
+    Record --> List["test:evidence:list 查询历史批次"]

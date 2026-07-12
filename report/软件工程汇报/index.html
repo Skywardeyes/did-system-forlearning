@@ -1,0 +1,450 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>信证台 · DID/VC 软件工程汇报</title>
+  <style>
+    :root{
+      --bg:#f6f7f9;--paper:#fff;--ink:#172033;--muted:#657087;--line:#dfe3ea;
+      --blue:#1746a2;--blue-soft:#eaf0ff;--green:#18794e;--orange:#b95000;--red:#b42318;
+      --shadow:0 14px 40px rgba(20,32,56,.08);--radius:18px;--max:1180px;
+    }
+    *{box-sizing:border-box}
+    html{scroll-behavior:smooth;scroll-padding-top:84px}
+    body{margin:0;background:var(--bg);color:var(--ink);font-family:"Segoe UI","Microsoft YaHei UI","Noto Sans SC",sans-serif;line-height:1.7}
+    a{color:inherit;text-decoration:none}
+    code,pre,.mono{font-family:"Cascadia Code","JetBrains Mono",Consolas,monospace}
+    .progress{position:fixed;z-index:100;left:0;top:0;height:4px;width:0;background:var(--blue)}
+    .topbar{position:sticky;z-index:90;top:0;height:72px;background:rgba(255,255,255,.94);backdrop-filter:blur(16px);border-bottom:1px solid var(--line)}
+    .topbar-inner{max-width:var(--max);height:100%;margin:auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;gap:24px}
+    .brand{display:flex;align-items:center;gap:12px;font-weight:750}.brand-mark{width:34px;height:34px;display:grid;place-items:center;background:var(--blue);color:#fff;border-radius:9px}
+    .nav{display:flex;gap:6px;overflow:auto;white-space:nowrap}.nav a{padding:8px 11px;border-radius:8px;color:var(--muted);font-size:14px}.nav a:hover,.nav a.active{background:var(--blue-soft);color:var(--blue)}
+    .hero{min-height:calc(100vh - 72px);display:grid;align-items:center;background:linear-gradient(135deg,#07172f,#1746a2);color:#fff;position:relative;overflow:hidden}
+    .hero:before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.06) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.06) 1px,transparent 1px);background-size:42px 42px;mask-image:linear-gradient(to bottom,black,transparent)}
+    .hero-inner{position:relative;max-width:var(--max);margin:auto;padding:90px 24px;width:100%}
+    .eyebrow{font-size:13px;letter-spacing:.18em;text-transform:uppercase;font-weight:700;color:#8fb3ff}
+    h1{font-size:clamp(52px,8vw,108px);line-height:.95;letter-spacing:-.05em;margin:20px 0 28px;max-width:900px}
+    .hero-lead{font-size:clamp(20px,2vw,28px);max-width:800px;color:#dbe7ff}
+    .hero-meta{margin-top:52px;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:1px;background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.18)}
+    .hero-meta div{padding:22px;background:rgba(7,23,47,.56)}.hero-meta b{display:block;font-size:24px}.hero-meta span{color:#b9cae7;font-size:14px}
+    main{max-width:var(--max);margin:auto;padding:0 24px 100px}
+    .section{padding:100px 0 30px;border-bottom:1px solid var(--line)}
+    .section-head{display:grid;grid-template-columns:130px 1fr;gap:30px;margin-bottom:44px}
+    .section-no{font-size:64px;line-height:1;font-weight:800;color:#d9dfeb}.section h2{font-size:clamp(36px,5vw,64px);line-height:1.05;letter-spacing:-.035em;margin:0 0 18px}.section-intro{font-size:20px;color:var(--muted);max-width:850px}
+    h3{font-size:25px;margin:0 0 14px;line-height:1.3}h4{font-size:18px;margin:0 0 8px}.subsection{margin:50px 0}
+    .grid-2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:22px}.grid-3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:20px}.grid-4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:16px}
+    .card{background:var(--paper);border:1px solid var(--line);border-radius:var(--radius);padding:25px;box-shadow:0 4px 18px rgba(20,32,56,.035)}
+    .card p{margin:8px 0 0;color:var(--muted)}.card .tag{display:inline-flex;padding:4px 9px;border-radius:99px;background:var(--blue-soft);color:var(--blue);font-size:12px;font-weight:700;letter-spacing:.08em;margin-bottom:14px}
+    .callout{border-left:5px solid var(--blue);background:var(--blue-soft);padding:20px 24px;border-radius:0 14px 14px 0;margin:25px 0}.callout strong{color:var(--blue)}
+    .warn{border-left-color:var(--orange);background:#fff4e8}.warn strong{color:var(--orange)}
+    .table-wrap{overflow:auto;background:#fff;border:1px solid var(--line);border-radius:var(--radius);box-shadow:var(--shadow)}
+    table{width:100%;border-collapse:collapse;min-width:760px}th,td{text-align:left;padding:15px 18px;border-bottom:1px solid var(--line);vertical-align:top}th{background:#f1f4f9;color:#3f4b62;font-size:14px}tr:last-child td{border-bottom:0}td code{font-size:13px;color:var(--blue)}
+    .diagram{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:28px;box-shadow:var(--shadow);overflow:auto}.diagram-title{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:18px}.diagram-title span{color:var(--muted);font-size:14px}.mermaid{display:flex;justify-content:center;min-width:700px}.mermaid svg{max-width:100%;height:auto}
+    .flow{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;align-items:stretch}.flow-step{position:relative;padding:22px 18px;background:#fff;border:1px solid var(--line);border-radius:14px}.flow-step:not(:last-child):after{content:"→";position:absolute;right:-12px;top:50%;transform:translate(50%,-50%);z-index:2;color:var(--blue);font-size:25px}.flow-step b{display:block;color:var(--blue);margin-bottom:6px}.flow-step span{color:var(--muted);font-size:14px}
+    .code-panel{background:#0d1526;color:#e8edf7;border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow)}.code-head{display:flex;justify-content:space-between;padding:12px 18px;background:#151f34;color:#aab8d3;font-size:13px}.code-panel pre{margin:0;padding:22px;overflow:auto;font-size:14px;line-height:1.7}.code-explain{background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:24px}.code-explain ol{margin:12px 0 0;padding-left:22px}.code-explain li{margin:9px 0;color:var(--muted)}
+    .metric-row{display:grid;grid-template-columns:repeat(4,1fr);gap:16px}.metric{background:#fff;border-top:5px solid var(--blue);padding:22px;border-radius:0 0 14px 14px;box-shadow:var(--shadow)}.metric b{font-size:42px;display:block;line-height:1}.metric span{color:var(--muted);font-size:14px}
+    .demo-script{counter-reset:demo}.demo-step{counter-increment:demo;display:grid;grid-template-columns:56px 1fr auto;gap:18px;align-items:start;padding:22px 0;border-top:1px solid var(--line)}.demo-step:before{content:counter(demo,decimal-leading-zero);width:44px;height:44px;display:grid;place-items:center;background:var(--blue);color:#fff;border-radius:12px;font-weight:800}.demo-step p{margin:5px 0;color:var(--muted)}.time{font-family:monospace;color:var(--blue);font-weight:700}
+    .closing{margin-top:90px;background:#0b1830;color:#fff;border-radius:28px;padding:60px}.closing h2{font-size:clamp(38px,5vw,70px);margin:0}.closing p{font-size:21px;color:#cbd8ee;max-width:850px}.closing-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;background:rgba(255,255,255,.18);margin-top:35px}.closing-grid div{background:#0b1830;padding:24px}.closing-grid b{display:block;color:#8fb3ff;margin-bottom:8px}
+    .backtop{position:fixed;right:22px;bottom:22px;width:44px;height:44px;border:0;border-radius:50%;background:var(--blue);color:#fff;font-size:20px;cursor:pointer;opacity:0;transform:translateY(10px);transition:.2s}.backtop.show{opacity:1;transform:none}
+    @media(max-width:900px){.nav{display:none}.hero-meta,.grid-3,.grid-4,.metric-row,.closing-grid{grid-template-columns:1fr 1fr}.grid-2{grid-template-columns:1fr}.section-head{grid-template-columns:1fr}.section-no{font-size:40px}.flow{grid-template-columns:1fr}.flow-step:not(:last-child):after{content:"↓";right:auto;left:50%;top:auto;bottom:-24px}.demo-step{grid-template-columns:48px 1fr}.time{grid-column:2}.mermaid{min-width:900px}}
+    @media(max-width:580px){.hero-meta,.grid-3,.grid-4,.metric-row,.closing-grid{grid-template-columns:1fr}.hero{min-height:auto}.section{padding-top:70px}.closing{padding:35px 24px}}
+    @media print{.topbar,.progress,.backtop{display:none}.hero{min-height:95vh;break-after:page}.section{break-before:page}.card,.diagram,.table-wrap{box-shadow:none}body{background:#fff}}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <header class="topbar">
+    <div class="topbar-inner">
+      <a class="brand" href="#top"><span class="brand-mark">证</span><span>信证台 · 软件工程汇报</span></a>
+      <nav class="nav" aria-label="汇报目录">
+        <a href="#requirements">需求分析</a><a href="#architecture">总体设计</a><a href="#detail">详细设计</a><a href="#coding">编码实现</a><a href="#testing">系统测试</a><a href="#demo">产品演示</a><a href="#ai">AI 协作</a>
+      </nav>
+    </div>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="hero-inner">
+      <div class="eyebrow">DID / VC LEARNING LAB · SOFTWARE ENGINEERING REPORT</div>
+      <h1>信证台</h1>
+      <p class="hero-lead">从需求、设计、编码与测试，到一条可以现场操作、逐项解释、留有证据的 DID/VC 产品闭环。</p>
+      <div class="hero-meta">
+        <div><b>20 分钟</b><span>两人合作汇报</span></div>
+        <div><b>5 个阶段</b><span>软件工程主线</span></div>
+        <div><b>124 / 124</b><span>最新 Node 测试通过</span></div>
+      </div>
+    </div>
+  </section>
+
+  <main>
+    <section class="section" id="overview">
+      <div class="section-head"><div class="section-no">00</div><div><div class="eyebrow">REPORT STRUCTURE</div><h2>汇报路线</h2><p class="section-intro">采用软件工程生命周期组织内容，随后进入真实产品演示，并以 AI 协作与学习反思收束。</p></div></div>
+      <div class="flow">
+        <div class="flow-step"><b>01 需求分析</b><span>问题、角色、功能与边界</span></div><div class="flow-step"><b>02 总体设计</b><span>架构、模块与技术选型</span></div><div class="flow-step"><b>03 详细设计</b><span>数据、状态机与交互时序</span></div><div class="flow-step"><b>04 编码实现</b><span>签名、存储、安全与日志</span></div><div class="flow-step"><b>05 系统测试</b><span>分层测试与证据归档</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="requirements">
+      <div class="section-head"><div class="section-no">01</div><div><div class="eyebrow">REQUIREMENTS ANALYSIS</div><h2>需求分析</h2><p class="section-intro">传统电子证书可以展示，却很难独立回答“谁签发、是否被改、身份是否有效、凭证是否已失效”。本项目把这些疑问转化为可执行、可测试的软件需求。</p></div></div>
+
+      <div class="subsection grid-2">
+        <div class="card"><span class="tag">问题定义</span><h3>从“看证书”升级为“验证证书”</h3><p>验证方不能只看一张图片，而要检查签发者身份、公钥、密码学签名、有效时间以及当前生命周期状态。</p></div>
+        <div class="card"><span class="tag">项目目标</span><h3>构建本地可信凭证闭环</h3><p>在不依赖数据库、区块链和外部网络的条件下，完整演示 DID 创建、VC 签发、验证、篡改检测和状态失效。</p></div>
+      </div>
+
+      <div class="subsection">
+        <div class="diagram"><div class="diagram-title"><h3>业务角色与用例图</h3><span>谁使用系统，以及分别完成什么操作</span></div>
+          <pre class="mermaid">
+flowchart LR
+  I[Issuer 发行方] --> A((创建与维护 DID))
+  I --> B((签发与管理 VC))
+  H[Holder 持有人] --> C((持有与提交 VC))
+  V[Verifier 验证方] --> D((执行七项验证))
+  M[演示管理员] --> E((重置数据与查询日志))
+  A --> S[信证台]
+  B --> S
+  C --> S
+  D --> S
+  E --> S
+          </pre>
+        </div>
+      </div>
+
+      <div class="subsection">
+        <h3>功能需求</h3>
+        <div class="table-wrap"><table><thead><tr><th>编号</th><th>模块</th><th>需求描述</th><th>验收方式</th></tr></thead><tbody>
+          <tr><td>FR-01</td><td>DID 管理</td><td>创建 <code>did:example</code> 与 <code>did:key</code>，查看 DID Document。</td><td>界面操作 + API 测试</td></tr>
+          <tr><td>FR-02</td><td>DID 生命周期</td><td>支持更新、密钥轮换、版本冲突检测和不可逆停用。</td><td>生命周期测试</td></tr>
+          <tr><td>FR-03</td><td>VC 签发</td><td>Issuer 使用 Ed25519 私钥签发培训结业凭证。</td><td>签发旅程 + JSON 检查</td></tr>
+          <tr><td>FR-04</td><td>VC 验证</td><td>独立返回格式、Issuer、DID、密钥、签名、时间和状态七项结果。</td><td>正常与篡改测试</td></tr>
+          <tr><td>FR-05</td><td>VC 生命周期</td><td>支持暂停、恢复、替换、过期和撤销。</td><td>状态机回归测试</td></tr>
+          <tr><td>FR-06</td><td>台账与日志</td><td>提供凭证台账、验证记录、结构化日志、搜索和分页。</td><td>UI + API 测试</td></tr>
+        </tbody></table></div>
+      </div>
+
+      <div class="subsection grid-3">
+        <div class="card"><span class="tag">可运行性</span><h3>本地独立运行</h3><p>Node.js 20+ 即可启动，无数据库和外部身份服务。</p></div>
+        <div class="card"><span class="tag">安全性</span><h3>控制公开边界</h3><p>普通 API 不返回私钥，日志写入前递归脱敏。</p></div>
+        <div class="card"><span class="tag">可测试性</span><h3>行为可以被证明</h3><p>单元、集成、API、功能、安全和 UI 分层覆盖。</p></div>
+      </div>
+      <div class="callout warn"><strong>范围边界：</strong>本系统参考 DID Core 与 VC Data Model 2.0 的核心结构，但属于教学实现；不接入真实区块链，不进行真实身份核验，也不宣称兼容正式生产级 cryptosuite。</div>
+    </section>
+
+    <section class="section" id="architecture">
+      <div class="section-head"><div class="section-no">02</div><div><div class="eyebrow">HIGH-LEVEL DESIGN</div><h2>总体设计</h2><p class="section-intro">采用本地 B/S 架构，并把页面、HTTP、领域规则、密码学、存储和日志拆成独立职责，使每一层都能单独理解和测试。</p></div></div>
+      <div class="diagram"><div class="diagram-title"><h3>系统总体架构图</h3><span>一次操作从浏览器流向业务层和持久化层</span></div>
+        <pre class="mermaid">
+flowchart TB
+  U[用户 / 浏览器]
+  subgraph P[表现层 public]
+    UI[单页操作台]
+    W[DID / 台账 / 验证 / 日志 UI]
+  end
+  subgraph A[接口层 server.js]
+    R[REST 路由]
+    G[JSON 校验 / 1MB 限制 / 安全响应头]
+  end
+  subgraph D[领域层]
+    S[VcService]
+    M[DidMethodRegistry]
+    C[Ed25519 / Stable JSON / Base58]
+    L[LogService / 脱敏]
+  end
+  subgraph T[持久化层]
+    JS[JsonStore]
+    LS[LogStore]
+    F1[(store.json)]
+    F2[(logs.json)]
+  end
+  U --> UI --> R
+  W --> R
+  R --> G --> S
+  S --> M
+  S --> C
+  S --> JS --> F1
+  S --> L --> LS --> F2
+        </pre>
+      </div>
+      <div class="subsection">
+        <h3>模块职责与代码映射</h3>
+        <div class="table-wrap"><table><thead><tr><th>层次</th><th>主要文件</th><th>职责</th><th>为什么拆分</th></tr></thead><tbody>
+          <tr><td>表现层</td><td><code>public/index.html</code><br><code>public/*.js</code></td><td>导航、表单、凭证台账、验证记录和日志界面。</td><td>让 UI 逻辑不侵入领域规则。</td></tr>
+          <tr><td>接口层</td><td><code>src/server.js</code></td><td>静态资源、API 路由、请求限制和错误映射。</td><td>统一 HTTP 协议边界。</td></tr>
+          <tr><td>领域层</td><td><code>src/vc-service.js</code></td><td>DID/VC 业务规则、状态机和七项验证。</td><td>核心行为可直接集成测试。</td></tr>
+          <tr><td>密码学</td><td><code>src/crypto.js</code></td><td>稳定序列化、Base58、Ed25519 签名和验签。</td><td>隔离密码学细节和业务含义。</td></tr>
+          <tr><td>数据层</td><td><code>src/store.js</code><br><code>src/log-store.js</code></td><td>串行更新、原子写入和独立日志存储。</td><td>降低丢失更新和半写文件风险。</td></tr>
+        </tbody></table></div>
+      </div>
+      <div class="callout"><strong>技术选型理由：</strong>Node.js 内置 HTTP 和 Ed25519 能力；JSON 文件可查看、易重置；原生前端减少课程现场对网络、包管理器和数据库服务的依赖。</div>
+    </section>
+
+    <section class="section" id="detail">
+      <div class="section-head"><div class="section-no">03</div><div><div class="eyebrow">DETAILED DESIGN</div><h2>详细设计</h2><p class="section-intro">总体架构回答“系统分几层”，详细设计进一步回答“数据怎样关联、状态如何变化、签发和验证如何协作”。</p></div></div>
+      <div class="subsection diagram"><div class="diagram-title"><h3>逻辑 ER 图</h3><span>实际保存为 JSON；本图用于表达领域对象关系</span></div>
+        <pre class="mermaid">
+erDiagram
+  DID_IDENTITY {
+    string id PK
+    string did UK
+    string role
+    string method
+    string status
+    int version
+    int keyVersion
+    json document
+  }
+  KEY_HISTORY {
+    string didId FK
+    int version
+    json publicJwk
+    datetime retiredAt
+  }
+  CREDENTIAL_RECORD {
+    string id PK
+    string issuerDid FK
+    string holderDid FK
+    string status
+    json credential
+    string replaces FK
+    string replacedBy FK
+  }
+  VERIFICATION_LOG {
+    string id PK
+    string credentialId FK
+    boolean valid
+    json failedChecks
+    datetime checkedAt
+  }
+  STRUCTURED_LOG {
+    string id PK
+    string correlationId
+    string module
+    string action
+    boolean success
+    json context
+  }
+  DID_IDENTITY ||--o{ KEY_HISTORY : keeps
+  DID_IDENTITY ||--o{ CREDENTIAL_RECORD : issues
+  DID_IDENTITY ||--o{ CREDENTIAL_RECORD : holds
+  CREDENTIAL_RECORD ||--o{ VERIFICATION_LOG : produces
+  CREDENTIAL_RECORD o|--o| CREDENTIAL_RECORD : replaces
+        </pre>
+      </div>
+      <div class="callout"><strong>关系解释：</strong>一个 DID 可以签发或持有多张 VC；一张 VC 可以产生多次验证记录；密钥轮换后旧公钥进入 KEY_HISTORY；凭证替换不会覆盖旧数据，而通过 replaces/replacedBy 形成可追溯关系。</div>
+
+      <div class="subsection grid-2">
+        <div class="card"><span class="tag">did:example</span><h3>注册型、可变化</h3><p>支持修改名称和 HTTPS 服务地址，使用 expectedVersion 检查并发冲突；轮换时保留历史公钥；停用后不可恢复。</p></div>
+        <div class="card"><span class="tag">did:key</span><h3>公钥衍生型、不可变</h3><p>Ed25519 公钥添加 multicodec 前缀后进行 Base58btc 编码，标识与密钥绑定，因此不支持更新、轮换和停用。</p></div>
+      </div>
+
+      <div class="subsection diagram"><div class="diagram-title"><h3>VC 生命周期状态机</h3><span>状态转换由 VC_TRANSITIONS 明确限制</span></div>
+        <pre class="mermaid">
+stateDiagram-v2
+  [*] --> active: 签发
+  active --> suspended: 暂停
+  suspended --> active: 恢复
+  active --> replaced: 替换
+  suspended --> replaced: 替换
+  active --> revoked: 撤销
+  suspended --> revoked: 撤销
+  active --> expired: 超过有效期
+  suspended --> expired: 超过有效期
+  replaced --> [*]
+  revoked --> [*]
+  expired --> [*]
+        </pre>
+      </div>
+      <div class="callout"><strong>关键含义：</strong>暂停是可逆状态；replaced、revoked 和 expired 是终态。密码学签名可能仍然正确，但只要凭证状态不是 active，最终验证结果仍然失败。</div>
+
+      <div class="subsection">
+        <h3>七项验证规则</h3>
+        <div class="grid-4">
+          <div class="card"><span class="tag">01</span><h4>格式完整性</h4><p>必要字段、subject 与 proof 是否存在。</p></div><div class="card"><span class="tag">02</span><h4>Issuer 解析</h4><p>本地注册表能否找到签发方。</p></div><div class="card"><span class="tag">03</span><h4>DID 状态</h4><p>签发方是否存在且未停用。</p></div><div class="card"><span class="tag">04</span><h4>密钥版本</h4><p>能否解析当前或历史公钥。</p></div><div class="card"><span class="tag">05</span><h4>Ed25519 签名</h4><p>验证来源并检测内容篡改。</p></div><div class="card"><span class="tag">06</span><h4>有效期</h4><p>当前时间是否处于有效区间。</p></div><div class="card"><span class="tag">07</span><h4>VC 状态</h4><p>本地记录是否仍为 active。</p></div><div class="card"><span class="tag">RESULT</span><h4>总体结论</h4><p>七项全部通过才返回 valid=true。</p></div>
+        </div>
+      </div>
+
+      <div class="subsection diagram"><div class="diagram-title"><h3>VC 签发与验证时序图</h3><span>从页面操作到签名、存储、验证和日志</span></div>
+        <pre class="mermaid">
+sequenceDiagram
+  actor U as 用户
+  participant UI as 浏览器 UI
+  participant API as server.js
+  participant V as VcService
+  participant C as crypto.js
+  participant S as JsonStore
+  participant L as LogService
+  U->>UI: 填写签发信息
+  UI->>API: POST /api/credentials
+  API->>V: issueCredential(input)
+  V->>S: 读取 DID 与状态
+  V->>V: 校验角色、字段和有效期
+  V->>C: signCredential(unsignedVC, privateJwk)
+  C-->>V: proofValue
+  V->>S: 原子保存 CredentialRecord
+  V->>L: 记录 VC_ISSUE
+  V-->>UI: 返回完整 VC
+  U->>UI: 执行验证
+  UI->>API: POST /api/verify
+  API->>V: verifyCredential(credential)
+  V->>S: 读取 DID、历史密钥与 VC 状态
+  V->>C: verifyCredentialSignature()
+  C-->>V: 签名结果
+  V->>V: 汇总七项检查
+  V->>S: 保存验证记录
+  V->>L: 记录 VC_VERIFY
+  V-->>UI: valid + checks + failedChecks
+        </pre>
+      </div>
+    </section>
+
+    <section class="section" id="coding">
+      <div class="section-head"><div class="section-no">04</div><div><div class="eyebrow">IMPLEMENTATION</div><h2>编码实现</h2><p class="section-intro">代码实现不只追求“功能能跑”，还处理确定性签名、并发更新、私钥公开边界、日志脱敏和 HTTP 输入约束。</p></div></div>
+      <div class="subsection grid-2">
+        <div class="code-panel"><div class="code-head"><span>src/crypto.js</span><span>稳定签名载荷</span></div><pre><code>export function stableStringify(value) {
+  if (value === null || typeof value !== 'object')
+    return JSON.stringify(value);
+  if (Array.isArray(value))
+    return `[${value.map(stableStringify).join(',')}]`;
+  return `{${Object.keys(value).sort()
+    .map(key => `${JSON.stringify(key)}:${stableStringify(value[key])}`)
+    .join(',')}}`;
+}</code></pre></div>
+        <div class="code-explain"><h3>为什么不能直接 JSON.stringify？</h3><ol><li>JSON 对象的键顺序可能不同，但业务内容相同。</li><li>签名针对字节序列；字节顺序不同会导致验签失败。</li><li><code>stableStringify</code> 递归排序对象键，使相同内容得到确定的签名字节。</li><li>数组保持原顺序，因为数组顺序通常具有业务含义。</li></ol></div>
+      </div>
+      <div class="subsection grid-2">
+        <div class="code-panel"><div class="code-head"><span>src/store.js</span><span>原子写入</span></div><pre><code>async writeAtomic(state) {
+  await mkdir(path.dirname(this.filePath), { recursive: true });
+  const temporaryPath = `${this.filePath}.tmp`;
+  await writeFile(temporaryPath,
+    `${JSON.stringify(state, null, 2)}\n`, 'utf8');
+  await rename(temporaryPath, this.filePath);
+}</code></pre></div>
+        <div class="code-explain"><h3>存储可靠性如何保证？</h3><ol><li>先写临时文件，完成后再整体替换正式文件，降低半写 JSON 风险。</li><li>Promise 事务队列串行执行“读取—修改—保存”。</li><li>避免两个并发请求读取同一旧状态后互相覆盖。</li><li>这适合单机教学场景，但不能替代生产数据库事务。</li></ol></div>
+      </div>
+      <div class="subsection grid-2">
+        <div class="card"><span class="tag">公开投影</span><h3><code>publicDid()</code></h3><p>从身份对象中移除当前 privateJwk，并递归移除 keyHistory 中的历史私钥。浏览器只获得验签所需的公开数据。</p></div>
+        <div class="card"><span class="tag">日志脱敏</span><h3><code>redact()</code></h3><p>private、secret、token、password、authorization、cookie、proofValue、credential 和请求体在持久化前统一替换。</p></div>
+      </div>
+      <div class="subsection">
+        <h3>HTTP 安全边界</h3><div class="table-wrap"><table><thead><tr><th>边界</th><th>实现</th><th>目的</th></tr></thead><tbody>
+          <tr><td>内容类型</td><td>写接口要求 <code>application/json</code></td><td>拒绝协议不明确的请求体。</td></tr><tr><td>请求大小</td><td>累计读取不得超过 1 MB</td><td>限制异常大请求占用内存。</td></tr><tr><td>静态路径</td><td><code>path.resolve</code> 后检查 publicRoot</td><td>阻止编码后的目录穿越。</td></tr><tr><td>响应头</td><td>CSP、no-referrer、nosniff</td><td>建立基础浏览器安全约束。</td></tr><tr><td>错误映射</td><td>400 / 404 / 409 / 413 / 415</td><td>让客户端和测试获得稳定契约。</td></tr>
+        </tbody></table></div>
+      </div>
+    </section>
+
+    <section class="section" id="testing">
+      <div class="section-head"><div class="section-no">05</div><div><div class="eyebrow">SYSTEM TESTING</div><h2>系统测试</h2><p class="section-intro">测试目标不是证明页面“看起来正常”，而是分别验证算法、领域规则、接口契约、用户旅程和安全边界。</p></div></div>
+      <div class="diagram"><div class="diagram-title"><h3>测试分层图</h3><span>底层反馈快，上层更接近真实用户</span></div><pre class="mermaid">
+flowchart TB
+  UI[UI / E2E：Chromium 用户旅程]
+  F[功能与 API：完整流程、协议和错误响应]
+  I[集成：VcService / Store / Logging]
+  U[单元：Crypto / DID Method / Query / UI Helper]
+  S[安全回归：数据暴露 / XSS / 路径穿越 / 协议加固]
+  UI --> F --> I --> U
+  S -.横向覆盖.-> UI
+  S -.横向覆盖.-> F
+  S -.横向覆盖.-> I
+  S -.横向覆盖.-> U
+      </pre></div>
+      <div class="subsection metric-row">
+        <div class="metric"><b>124/124</b><span>最新 Node 测试，本轮实际通过</span></div><div class="metric"><b>43/43</b><span>上一轮 Chromium UI 记录</span></div><div class="metric"><b>20/20</b><span>proof 篡改稳定性循环</span></div><div class="metric"><b>6</b><span>端到端核心业务旅程</span></div>
+      </div>
+      <div class="subsection"><h3>各层测试解决什么问题</h3><div class="table-wrap"><table><thead><tr><th>层级</th><th>重点</th><th>代表性问题</th></tr></thead><tbody>
+        <tr><td>单元</td><td>Stable JSON、Base58、Ed25519、Method、分页、脱敏</td><td>同一对象能否稳定签名？Base58 前导零是否正确？</td></tr><tr><td>集成</td><td>Store、Log、DID/VC Service 协作</td><td>并发创建是否丢失数据？历史密钥能否验证旧 VC？</td></tr><tr><td>API</td><td>全部路由、状态码、错误和分页契约</td><td>非法 JSON、错误 Content-Type、版本冲突如何响应？</td></tr><tr><td>功能</td><td>四种 Method 组合与完整生命周期</td><td>暂停、恢复、替换、撤销是否遵守状态机？</td></tr><tr><td>安全</td><td>私钥暴露、XSS、原型污染、目录穿越</td><td>公开 API 或日志是否泄露敏感数据？</td></tr><tr><td>UI</td><td>导航、表单、台账、验证原因、日志、响应式</td><td>真实用户能否完整走通产品流程？</td></tr>
+      </tbody></table></div></div>
+      <div class="subsection diagram"><div class="diagram-title"><h3>可验证测试证据链</h3><span>测试结论不只依赖一张终端截图</span></div><pre class="mermaid">
+flowchart LR
+  R[npm run test:evidence] --> N[执行 Node 测试]
+  R --> U[执行 Chromium UI]
+  N --> B[创建永久批次]
+  U --> B
+  B --> L[node.log / ui.log]
+  B --> M[result.md / metadata.json]
+  B --> C[test-cases.json / Playwright 报告]
+  L --> H[evidence-manifest + checksums.sha256]
+  M --> H
+  C --> H
+  H --> V[test:evidence:verify]
+      </pre></div>
+      <div class="callout"><strong>证据含义：</strong>批次记录 Git 提交、工作区状态、运行环境、阶段退出码、用例统计和原始输出；SHA-256 清单可以发现证据文件缺失、新增或内容被修改。</div>
+      <div class="callout warn"><strong>当前口径：</strong>Node 124 项已经在当前代码上复核通过；43 项 UI 来自上一轮执行记录，正式汇报前应在演示电脑重新安装 Playwright、执行全量测试并生成最终证据批次。</div>
+    </section>
+
+    <section class="section" id="demo">
+      <div class="section-head"><div class="section-no">06</div><div><div class="eyebrow">LIVE DEMO</div><h2>产品全流程演示</h2><p class="section-intro">演示控制在约 7 分钟，以一张结业 VC 为主线，观察正常、篡改、暂停、恢复、替换和撤销状态。</p></div></div>
+      <div class="demo-script">
+        <div class="demo-step"><div><h3>重置并载入演示数据</h3><p>生成“可信学习中心”Issuer、“张晓明”Holder 和初始结业 VC。</p></div><div class="time">00:25</div></div>
+        <div class="demo-step"><div><h3>查看 DID 与 DID Document</h3><p>指出 did:example、did:key、公钥、verificationMethod 和 capabilities。</p></div><div class="time">00:45</div></div>
+        <div class="demo-step"><div><h3>签发新 VC</h3><p>解释 issuer、credentialSubject、validUntil、keyVersion 和 proofValue。</p></div><div class="time">00:45</div></div>
+        <div class="demo-step"><div><h3>正常验证</h3><p>展示七项全部通过，并在验证记录台账看到成功结果。</p></div><div class="time">00:50</div></div>
+        <div class="demo-step"><div><h3>模拟篡改</h3><p>只改学员姓名，再次验证，观察 Ed25519 签名失败。</p></div><div class="time">00:35</div></div>
+        <div class="demo-step"><div><h3>暂停与恢复</h3><p>暂停后签名仍正确但状态失败；恢复后同一张原始 VC 重新通过。</p></div><div class="time">01:05</div></div>
+        <div class="demo-step"><div><h3>替换与撤销</h3><p>替换生成新 ID，旧凭证进入 replaced；撤销新凭证后验证状态失败。</p></div><div class="time">01:45</div></div>
+        <div class="demo-step"><div><h3>查看结构化日志</h3><p>展示 action、correlationId、失败检查项和脱敏详情。</p></div><div class="time">00:50</div></div>
+      </div>
+    </section>
+
+    <section class="section" id="ai">
+      <div class="section-head"><div class="section-no">07</div><div><div class="eyebrow">AI-ASSISTED DEVELOPMENT</div><h2>AI 辅助开发与学习</h2><p class="section-intro">AI 参与需求整理、方案比较、代码草案、测试补充和失败分析；但目标、边界、审核、运行验证和最终结论由成员负责。</p></div></div>
+      <div class="diagram"><div class="diagram-title"><h3>人机协作闭环</h3><span>AI 提速，测试反馈，人作判断</span></div><pre class="mermaid">
+flowchart LR
+  Q[人提出业务问题] --> A1[AI 梳理概念与候选方案]
+  A1 --> H1[人确定 MVP、边界和验收标准]
+  H1 --> A2[AI 辅助设计、代码草案与测试]
+  A2 --> H2[人阅读、集成并运行]
+  H2 --> T[自动测试 + 人工验收]
+  T --> D{发现问题?}
+  D -->|是| A3[AI 辅助分析原因]
+  A3 --> H3[人修改并回归]
+  H3 --> T
+  D -->|否| R[整理证据与学习反思]
+      </pre></div>
+      <div class="subsection"><h3>AI 与人的职责划分</h3><div class="table-wrap"><table><thead><tr><th>阶段</th><th>AI 辅助</th><th>人工负责</th><th>项目证据</th></tr></thead><tbody>
+        <tr><td>需求分析</td><td>解释概念、整理角色与异常场景</td><td>选择课程场景、定义 MVP</td><td>PRD、MVP、Method 选型</td></tr><tr><td>总体设计</td><td>比较架构、建议模块边界</td><td>决定本地 Node.js + JSON</td><td>开发方案与任务拆解</td></tr><tr><td>详细设计</td><td>生成数据、状态机和接口草案</td><td>审核业务合法性与标准边界</td><td>specs、plans、测试用例</td></tr><tr><td>编码实现</td><td>提供函数草案和重构建议</td><td>阅读、集成、运行和修正</td><td>src、public、Git 提交</td></tr><tr><td>系统测试</td><td>补充测试、分析失败输出</td><td>复现问题、判断测试有效性</td><td>test、缺陷报告、证据批次</td></tr>
+      </tbody></table></div></div>
+      <div class="subsection grid-3">
+        <div class="card"><span class="tag">技术学习</span><h3>理解验证的多个层次</h3><p>签名、身份、时间和状态分别回答不同问题，不能合并为一个“验签成功”。</p></div><div class="card"><span class="tag">工程学习</span><h3>用状态机和测试描述需求</h3><p>把“应该怎样”转化为合法转换、接口契约和自动化断言。</p></div><div class="card"><span class="tag">AI 学习</span><h3>输出必须经过证据闭环</h3><p>AI 建议只有经过阅读、运行、测试和人工判断后，才能成为项目结论。</p></div>
+      </div>
+    </section>
+
+    <section class="closing">
+      <h2>Build. Verify. Learn.</h2>
+      <p>让 AI 提速，让测试作证，让人负责。我们完成的不只是一个可运行页面，而是一条从需求到证据的软件工程链路。</p>
+      <div class="closing-grid"><div><b>技术成果</b>完成 DID、VC、七项验证、生命周期和日志闭环。</div><div><b>工程成果</b>完成需求、设计、编码、测试和证据归档。</div><div><b>学习成果</b>形成可解释、可复核的人机协作方法。</div></div>
+    </section>
+  </main>
+
+  <button class="backtop" id="backtop" aria-label="返回顶部">↑</button>
+  <script src="./mermaid.min.js"></script>
+  <script>
+    const progress=document.getElementById('progress');
+    const backtop=document.getElementById('backtop');
+    const navLinks=[...document.querySelectorAll('.nav a')];
+    const sections=navLinks.map(a=>document.querySelector(a.getAttribute('href'))).filter(Boolean);
+    function update(){
+      const max=document.documentElement.scrollHeight-innerHeight;
+      progress.style.width=`${max>0?scrollY/max*100:0}%`;
+      backtop.classList.toggle('show',scrollY>700);
+      let current=null;
+      for(const section of sections) if(section.getBoundingClientRect().top<=120) current=section;
+      navLinks.forEach(a=>a.classList.toggle('active',current&&a.getAttribute('href')===`#${current.id}`));
+    }
+    addEventListener('scroll',update,{passive:true});update();
+    backtop.addEventListener('click',()=>scrollTo({top:0,behavior:'smooth'}));
+    async function renderDiagrams(){
+      try{
+        mermaid.initialize({startOnLoad:false,theme:'base',securityLevel:'loose',themeVariables:{primaryColor:'#eaf0ff',primaryTextColor:'#172033',primaryBorderColor:'#1746a2',lineColor:'#53627a',secondaryColor:'#f1f4f9',tertiaryColor:'#fff'}});
+        await mermaid.run({querySelector:'.mermaid'});
+        document.body.dataset.diagrams='ready';
+      }catch(error){
+        document.body.dataset.diagrams='error';
+        console.warn('Mermaid 加载失败，保留图表源码作为降级展示。',error);
+      }
+      const sectionId=new URLSearchParams(location.search).get('section');
+      if(sectionId) document.getElementById(sectionId)?.scrollIntoView();
+    }
+    renderDiagrams();
+  </script>
+</body>
+</html>
