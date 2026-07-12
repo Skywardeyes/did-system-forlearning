@@ -1,0 +1,63 @@
+erDiagram
+    DID_IDENTITY {
+        string id PK
+        string did UK
+        string name
+        string role
+        string method
+        string status
+        int version
+        int keyVersion
+        json document
+        json publicJwk
+        json privateJwk
+        datetime createdAt
+    }
+    KEY_HISTORY {
+        string didId FK
+        int version
+        string verificationMethod
+        json publicJwk
+        json privateJwk
+        datetime retiredAt
+    }
+    CREDENTIAL_RECORD {
+        string id PK
+        string issuerDid FK
+        string holderDid FK
+        string status
+        json credential
+        string replaces FK
+        string replacedBy FK
+        datetime issuedAt
+        datetime suspendedAt
+        datetime resumedAt
+        datetime replacedAt
+        datetime revokedAt
+    }
+    VERIFICATION_LOG {
+        string id PK
+        string credentialId FK
+        boolean valid
+        json failedChecks
+        datetime checkedAt
+    }
+    STRUCTURED_LOG {
+        string id PK
+        string correlationId
+        string type
+        string level
+        string module
+        string action
+        boolean success
+        string targetId
+        string errorCode
+        json context
+        datetime occurredAt
+    }
+    DID_IDENTITY ||--o{ KEY_HISTORY : "保留历史密钥"
+    DID_IDENTITY ||--o{ CREDENTIAL_RECORD : "Issuer 签发"
+    DID_IDENTITY ||--o{ CREDENTIAL_RECORD : "Holder 持有"
+    CREDENTIAL_RECORD ||--o{ VERIFICATION_LOG : "产生验证记录"
+    CREDENTIAL_RECORD o|--o| CREDENTIAL_RECORD : "替换关系"
+

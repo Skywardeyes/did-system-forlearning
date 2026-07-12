@@ -1,0 +1,14 @@
+stateDiagram-v2
+    [*] --> active: 签发
+    active --> suspended: 暂停
+    suspended --> active: 恢复
+    active --> replaced: 替换
+    suspended --> replaced: 替换
+    active --> revoked: 撤销
+    suspended --> revoked: 撤销
+    active --> expired: 超过 validUntil
+    suspended --> expired: 超过 validUntil
+    replaced --> [*]
+    revoked --> [*]
+    expired --> [*]
+
