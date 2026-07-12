@@ -1,63 +1,21 @@
-erDiagram
-    DID_IDENTITY {
-        string id PK
-        string did UK
-        string name
-        string role
-        string method
-        string status
-        int version
-        int keyVersion
-        json document
-        json publicJwk
-        json privateJwk
-        datetime createdAt
-    }
-    KEY_HISTORY {
-        string didId FK
-        int version
-        string verificationMethod
-        json publicJwk
-        json privateJwk
-        datetime retiredAt
-    }
-    CREDENTIAL_RECORD {
-        string id PK
-        string issuerDid FK
-        string holderDid FK
-        string status
-        json credential
-        string replaces FK
-        string replacedBy FK
-        datetime issuedAt
-        datetime suspendedAt
-        datetime resumedAt
-        datetime replacedAt
-        datetime revokedAt
-    }
-    VERIFICATION_LOG {
-        string id PK
-        string credentialId FK
-        boolean valid
-        json failedChecks
-        datetime checkedAt
-    }
-    STRUCTURED_LOG {
-        string id PK
-        string correlationId
-        string type
-        string level
-        string module
-        string action
-        boolean success
-        string targetId
-        string errorCode
-        json context
-        datetime occurredAt
-    }
-    DID_IDENTITY ||--o{ KEY_HISTORY : "保留历史密钥"
-    DID_IDENTITY ||--o{ CREDENTIAL_RECORD : "Issuer 签发"
-    DID_IDENTITY ||--o{ CREDENTIAL_RECORD : "Holder 持有"
-    CREDENTIAL_RECORD ||--o{ VERIFICATION_LOG : "产生验证记录"
-    CREDENTIAL_RECORD o|--o| CREDENTIAL_RECORD : "替换关系"
+flowchart LR
+    DID["<b>DID_IDENTITY｜DID 身份</b><br/>id：内部编号（PK）<br/>did：去中心化标识符（UK）<br/>role：身份角色<br/>method：DID 方法<br/>status：当前状态<br/>version / keyVersion：版本号<br/>document：DID 文档"]
+    KEY["<b>KEY_HISTORY｜历史密钥</b><br/>didId：所属 DID（FK）<br/>version：密钥版本<br/>verificationMethod：验证方法<br/>publicJwk：历史公钥<br/>retiredAt：停用时间"]
+    VC["<b>CREDENTIAL_RECORD｜凭证记录</b><br/>id：凭证编号（PK）<br/>issuerDid：签发方（FK）<br/>holderDid：持有方（FK）<br/>status：生命周期状态<br/>credential：完整凭证<br/>replaces / replacedBy：替换关系"]
+    VERIFY["<b>VERIFICATION_LOG｜验证记录</b><br/>id：记录编号（PK）<br/>credentialId：被验证凭证（FK）<br/>valid：总体结果<br/>failedChecks：失败检查项<br/>checkedAt：验证时间"]
+    LOG["<b>STRUCTURED_LOG｜结构化日志</b><br/>correlationId：请求关联号<br/>type / level：类型与级别<br/>module / action：模块与动作<br/>success：执行结果<br/>targetId：业务对象编号"]
 
+    DID -->|"1 对多：保留轮换历史"| KEY
+    DID -->|"1 对多：作为签发方"| VC
+    DID -->|"1 对多：作为持有方"| VC
+    VC -->|"1 对多：产生验证记录"| VERIFY
+    VC -.->|"0 或 1：替换前后关联"| VC
+    DID -.->|"业务操作写入"| LOG
+    VC -.->|"业务操作写入"| LOG
+
+    classDef identity fill:#e8f0ff,stroke:#2457d6,stroke-width:2px,color:#10204a
+    classDef credential fill:#fff4d6,stroke:#d68a00,stroke-width:2px,color:#4a3000
+    classDef evidence fill:#e8f7ef,stroke:#168554,stroke-width:2px,color:#073b26
+    class DID,KEY identity
+    class VC credential
+    class VERIFY,LOG evidence

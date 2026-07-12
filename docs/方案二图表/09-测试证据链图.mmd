@@ -1,13 +1,42 @@
 flowchart LR
-    Run["npm run test:evidence"] --> Node["执行全部 Node 测试"]
-    Run --> UI["执行 Chromium UI 测试"]
-    Node --> Record["创建永久测试批次"]
-    UI --> Record
-    Record --> Raw["node.log / ui.log"]
-    Record --> Report["result.md / metadata.json / test-cases.json"]
-    Record --> Browser["playwright-report / test-results"]
-    Raw --> Manifest["evidence-manifest.json + checksums.sha256"]
-    Report --> Manifest
-    Browser --> Manifest
-    Manifest --> Verify["test:evidence:verify 校验缺失、新增和篡改"]
-    Record --> List["test:evidence:list 查询历史批次"]
+    subgraph EXEC["① 执行测试"]
+        RUN["统一测试入口<br/><code>npm run test:evidence</code>"]
+        NODE["Node 自动化测试<br/>单元、集成、API 与安全"]
+        UI["Chromium 界面测试<br/>真实用户操作流程"]
+        RUN --> NODE
+        RUN --> UI
+    end
+
+    subgraph ARCHIVE["② 永久归档"]
+        BATCH["创建带时间戳的测试批次"]
+        RAW["原始输出<br/>node.log / ui.log"]
+        RESULT["结果与环境<br/>result.md / metadata.json"]
+        CASES["用例与浏览器报告<br/>test-cases.json / Playwright 报告"]
+        BATCH --> RAW
+        BATCH --> RESULT
+        BATCH --> CASES
+    end
+
+    subgraph TRUST["③ 完整性校验"]
+        HASH["证据清单与 SHA-256 校验值<br/>防止文件缺失、新增或被修改"]
+        VERIFY["重新校验证据<br/><code>npm run test:evidence:verify -- &lt;批次目录&gt;</code>"]
+        HASH --> VERIFY
+    end
+
+    subgraph TRACE["④ 历史追溯"]
+        LIST["查询历次测试批次<br/><code>npm run test:evidence:list</code>"]
+    end
+
+    NODE --> BATCH
+    UI --> BATCH
+    RAW --> HASH
+    RESULT --> HASH
+    CASES --> HASH
+    BATCH --> LIST
+
+    classDef action fill:#e8f0ff,stroke:#2457d6,stroke-width:2px,color:#10204a
+    classDef archive fill:#fff4d6,stroke:#d68a00,stroke-width:2px,color:#4a3000
+    classDef trust fill:#e8f7ef,stroke:#168554,stroke-width:2px,color:#073b26
+    class RUN,NODE,UI action
+    class BATCH,RAW,RESULT,CASES archive
+    class HASH,VERIFY,LIST trust

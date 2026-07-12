@@ -1,30 +1,30 @@
 sequenceDiagram
-    actor U as 用户
-    participant UI as 浏览器 UI
-    participant API as server.js
-    participant VC as VcService
-    participant CR as crypto.js
-    participant ST as JsonStore
-    participant LG as LogService
-    U->>UI: 填写 Issuer、Holder 和课程信息
-    UI->>API: POST /api/credentials
-    API->>VC: issueCredential(input)
-    VC->>ST: load / update
+    actor U as User（用户）
+    participant UI as Browser UI（浏览器界面）
+    participant API as server.js（HTTP 服务）
+    participant VC as VcService（凭证服务）
+    participant CR as crypto.js（密码模块）
+    participant ST as JsonStore（JSON 存储）
+    participant LG as LogService（日志服务）
+    U->>UI: 填写 Issuer（签发方）、Holder（持有方）和课程信息
+    UI->>API: POST /api/credentials（请求创建凭证）
+    API->>VC: issueCredential(input)（签发凭证）
+    VC->>ST: load / update（读取并更新数据）
     VC->>VC: 校验角色、状态、字段和有效期
-    VC->>CR: signCredential(unsignedCredential, privateJwk)
-    CR-->>VC: proofValue
-    VC->>ST: 原子保存 CredentialRecord
-    VC->>LG: 写入 VC_ISSUE 审计日志
-    VC-->>API: credential record
-    API-->>UI: 201 + VC JSON
+    VC->>CR: signCredential(unsignedCredential, privateJwk)（使用私钥签名）
+    CR-->>VC: proofValue（数字签名值）
+    VC->>ST: 原子保存 CredentialRecord（凭证记录）
+    VC->>LG: 写入 VC_ISSUE（凭证签发）审计日志
+    VC-->>API: credential record（凭证记录）
+    API-->>UI: 201 Created（创建成功）+ VC JSON（凭证数据）
     U->>UI: 执行完整验证
-    UI->>API: POST /api/verify
-    API->>VC: verifyCredential(credential)
-    VC->>ST: 读取 DID、历史密钥、VC 状态
-    VC->>CR: verifyCredentialSignature()
-    CR-->>VC: 签名结果
-    VC->>VC: 汇总七项 checks
-    VC->>ST: 保存 verificationLog
-    VC->>LG: 写入 VC_VERIFY 审计日志
-    VC-->>UI: valid + checks + failedChecks
-
+    UI->>API: POST /api/verify（请求验证凭证）
+    API->>VC: verifyCredential(credential)（验证凭证）
+    VC->>ST: 读取 DID、历史密钥与 VC 状态
+    VC->>CR: verifyCredentialSignature()（验证数字签名）
+    CR-->>VC: signature result（签名结果）
+    VC->>VC: 汇总七项 checks（检查结果）
+    VC->>ST: 保存 verificationLog（验证记录）
+    VC->>LG: 写入 VC_VERIFY（凭证验证）审计日志
+    VC-->>API: valid（总体结论）+ checks（分项结果）+ failedChecks（失败项）
+    API-->>UI: 200 OK（请求成功）+ 验证报告

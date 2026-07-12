@@ -182,52 +182,25 @@ flowchart TB
       <div class="section-head"><div class="section-no">03</div><div><div class="eyebrow">DETAILED DESIGN</div><h2>详细设计</h2><p class="section-intro">总体架构回答“系统分几层”，详细设计进一步回答“数据怎样关联、状态如何变化、签发和验证如何协作”。</p></div></div>
       <div class="subsection diagram"><div class="diagram-title"><h3>逻辑 ER 图</h3><span>实际保存为 JSON；本图用于表达领域对象关系</span></div>
         <pre class="mermaid">
-erDiagram
-  DID_IDENTITY {
-    string id PK
-    string did UK
-    string role
-    string method
-    string status
-    int version
-    int keyVersion
-    json document
-  }
-  KEY_HISTORY {
-    string didId FK
-    int version
-    json publicJwk
-    datetime retiredAt
-  }
-  CREDENTIAL_RECORD {
-    string id PK
-    string issuerDid FK
-    string holderDid FK
-    string status
-    json credential
-    string replaces FK
-    string replacedBy FK
-  }
-  VERIFICATION_LOG {
-    string id PK
-    string credentialId FK
-    boolean valid
-    json failedChecks
-    datetime checkedAt
-  }
-  STRUCTURED_LOG {
-    string id PK
-    string correlationId
-    string module
-    string action
-    boolean success
-    json context
-  }
-  DID_IDENTITY ||--o{ KEY_HISTORY : keeps
-  DID_IDENTITY ||--o{ CREDENTIAL_RECORD : issues
-  DID_IDENTITY ||--o{ CREDENTIAL_RECORD : holds
-  CREDENTIAL_RECORD ||--o{ VERIFICATION_LOG : produces
-  CREDENTIAL_RECORD o|--o| CREDENTIAL_RECORD : replaces
+flowchart LR
+  DID["&lt;b&gt;DID_IDENTITY｜DID 身份&lt;/b&gt;&lt;br/&gt;id：内部编号（PK）&lt;br/&gt;did：去中心化标识符（UK）&lt;br/&gt;role：身份角色&lt;br/&gt;method：DID 方法&lt;br/&gt;status：当前状态&lt;br/&gt;version / keyVersion：版本号&lt;br/&gt;document：DID 文档"]
+  KEY["&lt;b&gt;KEY_HISTORY｜历史密钥&lt;/b&gt;&lt;br/&gt;didId：所属 DID（FK）&lt;br/&gt;version：密钥版本&lt;br/&gt;publicJwk：历史公钥&lt;br/&gt;retiredAt：停用时间"]
+  VC["&lt;b&gt;CREDENTIAL_RECORD｜凭证记录&lt;/b&gt;&lt;br/&gt;id：凭证编号（PK）&lt;br/&gt;issuerDid：签发方（FK）&lt;br/&gt;holderDid：持有方（FK）&lt;br/&gt;status：生命周期状态&lt;br/&gt;credential：完整凭证&lt;br/&gt;replaces / replacedBy：替换关系"]
+  VERIFY["&lt;b&gt;VERIFICATION_LOG｜验证记录&lt;/b&gt;&lt;br/&gt;credentialId：被验证凭证（FK）&lt;br/&gt;valid：总体结果&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
+  LOG["&lt;b&gt;STRUCTURED_LOG｜结构化日志&lt;/b&gt;&lt;br/&gt;correlationId：请求关联号&lt;br/&gt;type / level：类型与级别&lt;br/&gt;module / action：模块与动作&lt;br/&gt;success：执行结果"]
+  DID -->|"1 对多：保留轮换历史"| KEY
+  DID -->|"1 对多：作为签发方"| VC
+  DID -->|"1 对多：作为持有方"| VC
+  VC -->|"1 对多：产生验证记录"| VERIFY
+  VC -.->|"0 或 1：替换前后关联"| VC
+  DID -.->|"业务操作写入"| LOG
+  VC -.->|"业务操作写入"| LOG
+  classDef identity fill:#e8f0ff,stroke:#2457d6,stroke-width:2px,color:#10204a
+  classDef credential fill:#fff4d6,stroke:#d68a00,stroke-width:2px,color:#4a3000
+  classDef evidence fill:#e8f7ef,stroke:#168554,stroke-width:2px,color:#073b26
+  class DID,KEY identity
+  class VC credential
+  class VERIFY,LOG evidence
         </pre>
       </div>
       <div class="callout"><strong>关系解释：</strong>一个 DID 可以签发或持有多张 VC；一张 VC 可以产生多次验证记录；密钥轮换后旧公钥进入 KEY_HISTORY；凭证替换不会覆盖旧数据，而通过 replaces/replacedBy 形成可追溯关系。</div>
@@ -266,33 +239,33 @@ stateDiagram-v2
       <div class="subsection diagram"><div class="diagram-title"><h3>VC 签发与验证时序图</h3><span>从页面操作到签名、存储、验证和日志</span></div>
         <pre class="mermaid">
 sequenceDiagram
-  actor U as 用户
-  participant UI as 浏览器 UI
-  participant API as server.js
-  participant V as VcService
-  participant C as crypto.js
-  participant S as JsonStore
-  participant L as LogService
+  actor U as User（用户）
+  participant UI as Browser UI（浏览器界面）
+  participant API as server.js（HTTP 服务）
+  participant V as VcService（凭证服务）
+  participant C as crypto.js（密码模块）
+  participant S as JsonStore（JSON 存储）
+  participant L as LogService（日志服务）
   U->>UI: 填写签发信息
-  UI->>API: POST /api/credentials
-  API->>V: issueCredential(input)
+  UI->>API: POST /api/credentials（请求创建凭证）
+  API->>V: issueCredential(input)（签发凭证）
   V->>S: 读取 DID 与状态
   V->>V: 校验角色、字段和有效期
-  V->>C: signCredential(unsignedVC, privateJwk)
-  C-->>V: proofValue
-  V->>S: 原子保存 CredentialRecord
-  V->>L: 记录 VC_ISSUE
-  V-->>UI: 返回完整 VC
+  V->>C: signCredential(unsignedVC, privateJwk)（使用私钥签名）
+  C-->>V: proofValue（数字签名值）
+  V->>S: 原子保存 CredentialRecord（凭证记录）
+  V->>L: 记录 VC_ISSUE（凭证签发）
+  V-->>UI: 返回完整 VC（可验证凭证）
   U->>UI: 执行验证
-  UI->>API: POST /api/verify
-  API->>V: verifyCredential(credential)
+  UI->>API: POST /api/verify（请求验证凭证）
+  API->>V: verifyCredential(credential)（验证凭证）
   V->>S: 读取 DID、历史密钥与 VC 状态
-  V->>C: verifyCredentialSignature()
+  V->>C: verifyCredentialSignature()（验证数字签名）
   C-->>V: 签名结果
   V->>V: 汇总七项检查
-  V->>S: 保存验证记录
-  V->>L: 记录 VC_VERIFY
-  V-->>UI: valid + checks + failedChecks
+  V->>S: 保存 verificationLog（验证记录）
+  V->>L: 记录 VC_VERIFY（凭证验证）
+  V-->>UI: valid（结论）+ checks（分项）+ failedChecks（失败项）
         </pre>
       </div>
     </section>
@@ -355,17 +328,33 @@ flowchart TB
       </tbody></table></div></div>
       <div class="subsection diagram"><div class="diagram-title"><h3>可验证测试证据链</h3><span>测试结论不只依赖一张终端截图</span></div><pre class="mermaid">
 flowchart LR
-  R[npm run test:evidence] --> N[执行 Node 测试]
-  R --> U[执行 Chromium UI]
-  N --> B[创建永久批次]
+  subgraph EXEC["① 执行测试"]
+    R["统一测试入口&lt;br/&gt;npm run test:evidence"] --> N["Node 自动化测试&lt;br/&gt;单元、集成、API 与安全"]
+    R --> U["Chromium 界面测试&lt;br/&gt;真实用户操作流程"]
+  end
+  subgraph ARCHIVE["② 永久归档"]
+    B["创建带时间戳的测试批次"] --> L["原始输出&lt;br/&gt;node.log / ui.log"]
+    B --> M["结果与环境&lt;br/&gt;result.md / metadata.json"]
+    B --> C["用例与浏览器报告&lt;br/&gt;test-cases.json / Playwright 报告"]
+  end
+  subgraph TRUST["③ 完整性校验"]
+    H["证据清单与 SHA-256 校验值&lt;br/&gt;识别缺失、新增或修改"] --> V["重新校验证据&lt;br/&gt;npm run test:evidence:verify"]
+  end
+  subgraph TRACE["④ 历史追溯"]
+    Q["查询历次测试批次&lt;br/&gt;npm run test:evidence:list"]
+  end
+  N --> B
   U --> B
-  B --> L[node.log / ui.log]
-  B --> M[result.md / metadata.json]
-  B --> C[test-cases.json / Playwright 报告]
-  L --> H[evidence-manifest + checksums.sha256]
+  L --> H
   M --> H
   C --> H
-  H --> V[test:evidence:verify]
+  B --> Q
+  classDef action fill:#e8f0ff,stroke:#2457d6,stroke-width:2px,color:#10204a
+  classDef archive fill:#fff4d6,stroke:#d68a00,stroke-width:2px,color:#4a3000
+  classDef trust fill:#e8f7ef,stroke:#168554,stroke-width:2px,color:#073b26
+  class R,N,U action
+  class B,L,M,C archive
+  class H,V,Q trust
       </pre></div>
       <div class="callout"><strong>证据含义：</strong>批次记录 Git 提交、工作区状态、运行环境、阶段退出码、用例统计和原始输出；SHA-256 清单可以发现证据文件缺失、新增或内容被修改。</div>
       <div class="callout warn"><strong>当前口径：</strong>Node 124 项已经在当前代码上复核通过；43 项 UI 来自上一轮执行记录，正式汇报前应在演示电脑重新安装 Playwright、执行全量测试并生成最终证据批次。</div>
