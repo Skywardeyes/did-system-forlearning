@@ -26,7 +26,7 @@ test('HTTP tampering journey rejects subject, course, issuer, validity and proof
     (vc) => { vc.credentialSubject.course = 'Other'; },
     (vc) => { vc.issuer = 'did:example:missing'; },
     (vc) => { vc.validUntil = '2020-01-01T00:00:00.000Z'; },
-    (vc) => { vc.proof.proofValue = `A${vc.proof.proofValue.slice(1)}`; },
+    (vc) => { vc.proof.proofValue = `${vc.proof.proofValue[0] === 'A' ? 'B' : 'A'}${vc.proof.proofValue.slice(1)}`; },
   ];
   for (const mutate of mutations) {
     const credential = structuredClone(demo.credential.credential);

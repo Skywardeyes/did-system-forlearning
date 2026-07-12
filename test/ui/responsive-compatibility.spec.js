@@ -1,0 +1,8 @@
+import { expect, test } from '@playwright/test';
+import { resetDemo } from '../helpers/ui-fixtures.js';
+
+test('桌面视口下五个功能入口均可导航', async ({ page, request }) => { await resetDemo(request); await page.goto('/'); for (const view of ['overview','identities','issue','verify','logs']) { await page.locator(`[data-view="${view}"]`).click(); await expect(page.locator(`#view-${view}`)).toBeVisible(); } });
+test('移动视口下页面无横向溢出', async ({ page, request }) => { await resetDemo(request); await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/'); expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true); });
+test('移动视口下导航保持可用', async ({ page, request }) => { await resetDemo(request); await page.setViewportSize({ width: 390, height: 844 }); await page.goto('/'); await expect(page.locator('.nav-item')).toHaveCount(5); for (const item of await page.locator('.nav-item').all()) await expect(item).toBeVisible(); });
+test('长凭证 ID 和失败原因不破坏表格布局', async ({ page, request }) => { await resetDemo(request); await page.goto('/'); await page.locator('[data-view="verify"]').click(); expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true); });
+test('桌面与移动视口下表单输入可用', async ({ page, request }) => { await resetDemo(request); for (const width of [1280, 390]) { await page.setViewportSize({ width, height: 844 }); await page.goto('/'); await page.locator('[data-view="issue"]').click(); await expect(page.locator('#issue-form')).toBeVisible(); await expect(page.locator('#issue-form button[type="submit"]')).toBeEnabled(); } });
