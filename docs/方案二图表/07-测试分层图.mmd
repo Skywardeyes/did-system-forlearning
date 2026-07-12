@@ -1,0 +1,12 @@
+flowchart TB
+    UI["UI/E2E：Playwright 浏览器旅程"]
+    FUN["功能/API：业务流程、协议与错误响应"]
+    INT["集成：Service、Store、Logging"]
+    UNIT["单元：Crypto、DID Method、Query、UI Helpers"]
+    SEC["横向安全回归：数据暴露、XSS、目录穿越、协议加固"]
+    UI --> FUN --> INT --> UNIT
+    SEC -.覆盖各层.-> UI
+    SEC -.覆盖各层.-> FUN
+    SEC -.覆盖各层.-> INT
+    SEC -.覆盖各层.-> UNIT
+

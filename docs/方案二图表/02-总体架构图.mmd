@@ -1,0 +1,39 @@
+flowchart TB
+    User["用户 / 浏览器"]
+    subgraph FE["表现层 public/"]
+        Page["index.html"]
+        App["app.js"]
+        UI["DID / 列表 / 日志 UI 模块"]
+    end
+    subgraph API["接口层 src/server.js"]
+        Static["静态资源服务"]
+        Router["REST API 路由"]
+        Guard["JSON 校验、1MB 限制、安全响应头"]
+    end
+    subgraph Domain["业务与领域层"]
+        Service["VcService"]
+        Registry["DidMethodRegistry"]
+        Crypto["Ed25519 / Stable JSON / Base58"]
+        Query["搜索、排序、分页"]
+        Logs["LogService / 递归脱敏"]
+    end
+    subgraph Data["数据访问与持久化层"]
+        Store["JsonStore"]
+        LogStore["LogStore"]
+        Business[("data/store.json")]
+        Audit[("data/logs.json")]
+    end
+    User --> FE
+    FE -->|"HTTP / JSON"| API
+    Router --> Service
+    Router --> Logs
+    Service --> Registry
+    Service --> Crypto
+    Service --> Query
+    Service --> Store
+    Logs --> Query
+    Logs --> LogStore
+    Store --> Business
+    LogStore --> Audit
+    Static --> FE
+

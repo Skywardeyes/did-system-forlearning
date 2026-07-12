@@ -1,0 +1,30 @@
+sequenceDiagram
+    actor U as 用户
+    participant UI as 浏览器 UI
+    participant API as server.js
+    participant VC as VcService
+    participant CR as crypto.js
+    participant ST as JsonStore
+    participant LG as LogService
+    U->>UI: 填写 Issuer、Holder 和课程信息
+    UI->>API: POST /api/credentials
+    API->>VC: issueCredential(input)
+    VC->>ST: load / update
+    VC->>VC: 校验角色、状态、字段和有效期
+    VC->>CR: signCredential(unsignedCredential, privateJwk)
+    CR-->>VC: proofValue
+    VC->>ST: 原子保存 CredentialRecord
+    VC->>LG: 写入 VC_ISSUE 审计日志
+    VC-->>API: credential record
+    API-->>UI: 201 + VC JSON
+    U->>UI: 执行完整验证
+    UI->>API: POST /api/verify
+    API->>VC: verifyCredential(credential)
+    VC->>ST: 读取 DID、历史密钥、VC 状态
+    VC->>CR: verifyCredentialSignature()
+    CR-->>VC: 签名结果
+    VC->>VC: 汇总七项 checks
+    VC->>ST: 保存 verificationLog
+    VC->>LG: 写入 VC_VERIFY 审计日志
+    VC-->>UI: valid + checks + failedChecks
+

@@ -1,0 +1,12 @@
+flowchart LR
+    Input["输入 VC JSON"] --> F["1 格式完整性"]
+    F --> I["2 Issuer DID 解析"]
+    I --> D["3 DID 当前状态"]
+    D --> K["4 密钥版本与验证方法"]
+    K --> S["5 Ed25519 签名"]
+    S --> T["6 有效期"]
+    T --> C["7 VC 当前状态"]
+    C --> All{"七项全部通过?"}
+    All -->|是| Valid["valid = true"]
+    All -->|否| Invalid["valid = false + failedChecks"]
+

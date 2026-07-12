@@ -1,0 +1,26 @@
+flowchart LR
+    Issuer["Issuer 发行方"]
+    Holder["Holder 持有人"]
+    Verifier["Verifier 验证方"]
+    Admin["演示管理员"]
+    subgraph System["信证台 DID/VC 系统"]
+        UC1((创建与查看 DID))
+        UC2((更新/轮换/停用 DID))
+        UC3((签发结业 VC))
+        UC4((查看与提交 VC))
+        UC5((执行七项验证))
+        UC6((暂停/恢复/替换/撤销 VC))
+        UC7((查询审计日志))
+        UC8((重置演示数据))
+    end
+    Issuer --> UC1
+    Issuer --> UC2
+    Issuer --> UC3
+    Issuer --> UC6
+    Holder --> UC1
+    Holder --> UC4
+    Verifier --> UC4
+    Verifier --> UC5
+    Admin --> UC7
+    Admin --> UC8
+
