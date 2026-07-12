@@ -1,6 +1,7 @@
 import { completeDidCreation, renderDidCard } from './did-ui.js';
 import { applyListAction, createListState, renderPagination } from './list-ui.js';
 import { applyLogFilter, createLogFilters, renderLogRow } from './log-ui.js';
+import { credentialRows, verificationRows } from './credential-ledger-ui.js';
 
 const state = { dids: [], credentials: [], verificationLogs: [], structuredLogs: [], selectedCredential: null };
 const listStates = { did: createListState(), vc: createListState(), log: createListState() };
@@ -55,8 +56,13 @@ function render() {
   renderSelects();
   $('#did-pagination').innerHTML = renderPagination(listMeta.did, { id: 'did', pageSize: listStates.did.pageSize });
   $('#vc-pagination').innerHTML = renderPagination(listMeta.vc, { id: 'vc', pageSize: listStates.vc.pageSize });
+  $('#issue-vc-pagination').innerHTML = renderPagination(listMeta.vc, { id: 'issue-vc', pageSize: listStates.vc.pageSize });
   $('#log-pagination').innerHTML = renderPagination(listMeta.log, { id: 'log', pageSize: listStates.log.pageSize });
+  $('#verify-log-pagination').innerHTML = renderPagination(listMeta.log, { id: 'verify-log', pageSize: listStates.log.pageSize });
   bindPagination('did'); bindPagination('vc'); bindPagination('log');
+  bindAliasPagination('issue-vc', 'vc'); bindAliasPagination('verify-log', 'log');
+  $('#issue-vc-search').value = listStates.vc.search;
+  $('#verify-log-search').value = listStates.log.search;
 }
 
 function renderStructuredLogs() {
@@ -91,19 +97,13 @@ function renderDids() {
 }
 
 function renderCredentials() {
-  const tbody = $('#credential-table');
+  const tables = [$('#credential-table'), $('#issue-credential-table')];
   if (!state.credentials.length) {
-    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无凭证，请先创建身份并签发</td></tr>';
+    tables.forEach((tbody) => { tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无凭证，请先创建身份并签发</td></tr>'; });
     return;
   }
-  tbody.innerHTML = state.credentials.map((record) => `
-    <tr>
-      <td><strong>${escapeHtml(record.credential.credentialSubject.name)}</strong><small title="${record.id}">${short(record.id, 18)}</small></td>
-      <td>${escapeHtml(record.credential.credentialSubject.course)}</td>
-      <td>${formatDate(record.issuedAt)}</td>
-      <td><span class="status ${record.status}">${escapeHtml(record.status)}</span></td>
-      <td><button class="table-action" data-open-vc="${record.id}">查看</button>${record.status === 'active' ? ` · <button class="table-action" data-vc-action="suspend" data-id="${record.id}">暂停</button> · <button class="table-action" data-vc-action="replace" data-id="${record.id}">更新</button> · <button class="table-action" data-revoke="${record.id}">撤销</button>` : record.status === 'suspended' ? ` · <button class="table-action" data-vc-action="resume" data-id="${record.id}">恢复</button> · <button class="table-action" data-vc-action="replace" data-id="${record.id}">更新</button> · <button class="table-action" data-revoke="${record.id}">撤销</button>` : ''}</td>
-    </tr>`).join('');
+  const rows = credentialRows(state.credentials, { escapeHtml, formatDate, short });
+  tables.forEach((tbody) => { tbody.innerHTML = rows; });
   $$('[data-open-vc]').forEach((button) => button.addEventListener('click', () => {
     const record = state.credentials.find((item) => item.id === button.dataset.openVc);
     openJson('可验证凭证 VC', record.credential);
@@ -114,9 +114,14 @@ function renderCredentials() {
 
 function renderLogs() {
   const container = $('#recent-logs');
-  if (!state.verificationLogs.length) { container.className = 'activity-list empty-state'; container.textContent = '暂无验证记录'; return; }
+  if (!state.verificationLogs.length) {
+    container.className = 'activity-list empty-state'; container.textContent = '暂无验证记录';
+    $('#verification-log-table').innerHTML = '<tr><td colspan="4" class="empty-state">暂无验证记录</td></tr>';
+    return;
+  }
   container.className = 'activity-list';
   container.innerHTML = state.verificationLogs.slice(0, 4).map((log) => `<div class="activity-item"><i class="${log.valid ? 'ok' : ''}"></i><strong>${log.valid ? '验证通过' : '验证失败'}</strong><span>${formatDate(log.checkedAt)}</span></div>`).join('');
+  $('#verification-log-table').innerHTML = verificationRows(state.verificationLogs, { escapeHtml, formatDate, short });
 }
 
 function renderSelects() {
@@ -169,6 +174,13 @@ function bindPagination(type) {
   container.querySelector(`#${type}-page-size`)?.addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
 }
 
+function bindAliasPagination(prefix, type) {
+  const container = $(`#${prefix}-pagination`);
+  container.querySelector('[data-page="prev"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page - 1 }));
+  container.querySelector('[data-page="next"]')?.addEventListener('click', () => changeList(type, { type: 'page', value: listMeta[type].page + 1 }));
+  container.querySelector(`#${prefix}-page-size`)?.addEventListener('change', (event) => changeList(type, { type: 'pageSize', value: event.target.value }));
+}
+
 async function changeList(type, action) { Object.assign(listStates[type], applyListAction(listStates[type], action)); await refresh(); }
 
 function bindSearchControls(prefix, submit) {
@@ -192,6 +204,8 @@ function bindSearchControls(prefix, submit) {
 for (const type of ['did', 'vc', 'log']) {
   bindSearchControls(type, (value) => changeList(type, { type: 'search', value }));
 }
+bindSearchControls('issue-vc', (value) => changeList('vc', { type: 'search', value }));
+bindSearchControls('verify-log', (value) => changeList('log', { type: 'search', value }));
 
 bindSearchControls('structured-log', (value) => changeStructuredLogs({ type: 'search', value }));
 

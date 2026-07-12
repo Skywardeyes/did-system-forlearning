@@ -86,3 +86,4 @@ dialog { width: min(820px, calc(100vw - 32px)); max-height: 82vh; padding: 0; bo
 .log-level.unknown { color: var(--muted); background: #f1f2f2; }
 @media (max-width: 1000px) { .log-filters { grid-template-columns: repeat(2,minmax(0,1fr)); } }
 @media (max-width: 640px) { nav { grid-template-columns: repeat(5,1fr); }.list-tools { padding-inline: 12px; }.pagination { padding-inline: 12px; }.pagination > * { min-width: 0; }.page-summary { margin-left: 0; flex: 1 1 120px; }.log-filters { grid-template-columns: 1fr; padding-inline: 12px; } }
+.page-ledger { margin-top: 22px; }
