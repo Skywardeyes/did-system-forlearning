@@ -10,6 +10,7 @@ import {
   parsePlaywright,
   renderMarkdown,
 } from './helpers/test-records.js';
+import { buildEvidenceManifest } from './helpers/test-evidence.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const require = createRequire(import.meta.url);
@@ -118,7 +119,7 @@ export async function runRecordedTests({
   const npmCli = process.env.npm_execpath;
   const actualStages = stages || [
     { key: 'node', command: process.execPath, args: [npmCli, 'run', 'test:node'], display: 'npm run test:node' },
-    { key: 'ui', command: process.execPath, args: [npmCli, 'run', 'test:ui'], display: 'npm run test:ui' },
+    { key: 'ui', command: process.execPath, args: [npmCli, 'run', 'test:ui'], display: 'npm run test:ui', env: { PLAYWRIGHT_HTML_OUTPUT_DIR: path.join(runPath, 'playwright-report'), PLAYWRIGHT_OUTPUT_DIR: path.join(runPath, 'test-results') } },
   ];
   const results = {};
   for (const stage of actualStages) {
@@ -138,7 +139,8 @@ export async function runRecordedTests({
     previous: history.previous?.analysis || null,
     baseline: history.baseline?.analysis || null,
   });
-  const exitCode = Object.values(results).some((result) => result.exitCode !== 0) ? 1 : 0;
+  const invalidEvidence = Object.values(results).some((result) => result.exitCode !== 0 || !result.stats.parsed || result.stats.failed !== 0 || result.stats.skipped !== 0 || result.stats.todo !== 0);
+  const exitCode = invalidEvidence ? 1 : 0;
   const status = commandOutput('git', ['status', '--short']);
   const metadata = {
     runId: path.basename(runPath),
@@ -160,6 +162,13 @@ export async function runRecordedTests({
   };
   await writeFile(path.join(runPath, 'metadata.json'), `${JSON.stringify(metadata, null, 2)}\n`, 'utf8');
   await writeFile(path.join(runPath, 'result.md'), renderMarkdown(metadata), 'utf8');
+  await mkdir(path.join(runPath, 'playwright-report'), { recursive: true });
+  await mkdir(path.join(runPath, 'test-results'), { recursive: true });
+  const testCases = Object.entries(results).flatMap(([stage, result]) => (result.stats.cases || []).map((entry) => ({ stage, ...entry })));
+  await writeFile(path.join(runPath, 'test-cases.json'), `${JSON.stringify({ count: testCases.length, cases: testCases }, null, 2)}\n`, 'utf8');
+  const manifest = await buildEvidenceManifest(runPath);
+  await writeFile(path.join(runPath, 'evidence-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  await writeFile(path.join(runPath, 'checksums.sha256'), `${manifest.files.map((file) => `${file.sha256}  ${file.path}`).join('\n')}\n`, 'utf8');
   if (!quiet) console.log(`\n测试记录：${runPath}`);
   return { exitCode, runPath, metadata };
 }

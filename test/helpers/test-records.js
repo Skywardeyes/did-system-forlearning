@@ -25,7 +25,8 @@ export function parseNodeTap(output) {
   const failureNames = [...output.matchAll(/^not ok \d+ - (.+)$/gm)]
     .map((match) => match[1].trim())
     .filter((name) => !/^[A-Z]:\\/.test(name));
-  return { tests, passed, failed, skipped, todo, failureNames, parsed: tests !== null && passed !== null && failed !== null };
+  const cases = [...output.matchAll(/^(ok|not ok) \d+ - (.+)$/gm)].map((match) => ({ title: match[2].trim(), result: match[1] === 'ok' ? 'passed' : 'failed', file: null }));
+  return { tests, passed, failed, skipped, todo, failureNames, cases, parsed: tests !== null && passed !== null && failed !== null };
 }
 
 function playwrightCount(output, label) {
@@ -39,7 +40,11 @@ export function parsePlaywright(output) {
   const skipped = playwrightCount(output, 'skipped');
   const failureNames = [...output.matchAll(/^\s*\d+\) \[[^\]]+\] › .* › (.+)$/gm)].map((match) => match[1].trim());
   const parsed = passed + failed + skipped > 0;
-  return { tests: parsed ? passed + failed + skipped : null, passed: parsed ? passed : null, failed: parsed ? failed : null, skipped: parsed ? skipped : null, todo: 0, failureNames, parsed };
+  const cases = [...output.matchAll(/^\s*(?:ok|x|-)\s+\d+\s+\[[^\]]+\]\s+›\s+(.+?)(?:\s+\([\d.]+(?:ms|s)\))?$/gm)].map((match) => {
+    const text = match[1].trim(); const separator = text.lastIndexOf(' › '); const location = separator >= 0 ? text.slice(0, separator) : null;
+    return { title: separator >= 0 ? text.slice(separator + 3) : text, result: 'passed', file: location };
+  });
+  return { tests: parsed ? passed + failed + skipped : null, passed: parsed ? passed : null, failed: parsed ? failed : null, skipped: parsed ? skipped : null, todo: 0, failureNames, cases, parsed };
 }
 
 export function buildAnalysis({ node, ui, knownFailures = [], previous = null, baseline = null }) {

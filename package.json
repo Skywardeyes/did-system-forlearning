@@ -15,7 +15,10 @@
     "test:security": "node --test test/security",
     "test:node": "node test/run-node-tests.js",
     "test:ui": "playwright test",
-    "test:all": "node test/run-recorded-tests.js"
+    "test:all": "node test/run-recorded-tests.js",
+    "test:evidence": "node test/run-recorded-tests.js",
+    "test:evidence:verify": "node test/verify-test-evidence.js",
+    "test:evidence:list": "node test/list-test-evidence.js"
   },
   "engines": {
     "node": ">=20"

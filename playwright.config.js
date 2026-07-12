@@ -2,11 +2,12 @@ import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
   testDir: './test/ui',
+  outputDir: process.env.PLAYWRIGHT_OUTPUT_DIR || 'test-results',
   fullyParallel: false,
   workers: 1,
   retries: 0,
   timeout: 30_000,
-  reporter: [['list'], ['html', { open: 'never' }]],
+  reporter: [['list'], ['html', { open: 'never', outputFolder: process.env.PLAYWRIGHT_HTML_OUTPUT_DIR || 'playwright-report' }]],
   use: {
     baseURL: 'http://127.0.0.1:4174',
     trace: 'retain-on-failure',

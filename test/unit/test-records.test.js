@@ -27,6 +27,7 @@ test('parses Node TAP totals and failure names', () => {
   assert.deepEqual(parseNodeTap(output), {
     tests: 3, passed: 2, failed: 1, skipped: 0, todo: 0,
     failureNames: ['concurrent service writes preserve both identities'],
+    cases: [{ title: 'concurrent service writes preserve both identities', result: 'failed', file: null }],
     parsed: true,
   });
   assert.equal(parseNodeTap('no summary').parsed, false);
@@ -34,7 +35,7 @@ test('parses Node TAP totals and failure names', () => {
 
 test('parses Playwright success and mixed results', () => {
   assert.deepEqual(parsePlaywright('  6 passed (9.4s)'), {
-    tests: 6, passed: 6, failed: 0, skipped: 0, todo: 0, failureNames: [], parsed: true,
+    tests: 6, passed: 6, failed: 0, skipped: 0, todo: 0, failureNames: [], cases: [], parsed: true,
   });
   const mixed = parsePlaywright('  1) [chromium] › file.spec.js:3:1 › broken journey\n  1 failed\n  5 passed (10s)');
   assert.equal(mixed.tests, 6);

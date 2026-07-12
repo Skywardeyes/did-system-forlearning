@@ -28,7 +28,8 @@ test('successful run creates logs, metadata and Markdown', async (t) => {
     quiet: true,
   });
   assert.equal(result.exitCode, 0);
-  assert.deepEqual((await readdir(result.runPath)).sort(), ['metadata.json', 'node.log', 'result.md', 'ui.log']);
+  const files = await readdir(result.runPath);
+  for (const expected of ['checksums.sha256', 'evidence-manifest.json', 'metadata.json', 'node.log', 'playwright-report', 'result.md', 'test-cases.json', 'test-results', 'ui.log']) assert.ok(files.includes(expected));
   const metadata = JSON.parse(await readFile(path.join(result.runPath, 'metadata.json'), 'utf8'));
   assert.equal(metadata.startedAtLocal, '2026-07-10 21:30:15');
   assert.equal(metadata.analysis.total, 3);
