@@ -5,8 +5,8 @@
   "description": "DID/VC training camp graduation project for local demonstrations",
   "type": "module",
   "scripts": {
-    "start": "node src/server.js",
-    "dev": "node --watch src/server.js",
+    "start": "node --env-file=.env src/start.js",
+    "dev": "node --env-file=.env --watch src/start.js",
     "test": "node --test",
     "test:unit": "node --test test/unit",
     "test:integration": "node --test test/integration",

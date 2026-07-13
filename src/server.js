@@ -6,8 +6,6 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicRoot = path.join(root, 'public');
-const port = Number(process.env.PORT || 4173);
-
 const noOpLogService = { query: async () => ({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1 }), get: async () => null,
   clear: async () => ({ cleared: true }), info: async () => null, warn: async () => null, error: async () => null };
 
@@ -191,13 +189,3 @@ export function createAppServer(activeService, { logService = noOpLogService } =
   }
 }); }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const { bootstrap } = await import('./bootstrap.js');
-  try {
-    const { server } = await bootstrap();
-    server.listen(port, '127.0.0.1', () => console.log(`DID/VC Learning Lab running at http://127.0.0.1:${port}`));
-  } catch (error) {
-    console.error(`[${error.code || 'STARTUP_FAILED'}] ${error.message}`);
-    process.exitCode = 1;
-  }
-}
