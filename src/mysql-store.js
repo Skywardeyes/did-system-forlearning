@@ -23,7 +23,7 @@ export class MySqlStore {
   async load(executor = this.pool) {
     const state = structuredClone(EMPTY_STATE);
     for (const [property, table] of COLLECTIONS) {
-      const [rows] = await executor.execute(`SELECT payload FROM ${table} ORDER BY position_index, id`);
+      const [rows] = await executor.execute(`SELECT id, payload FROM ${table} ORDER BY position_index, id`);
       state[property] = rows.map((row) => this.decodeItem(table, String(row.id || ''), parsePayload(row.payload)));
     }
     return state;
@@ -77,4 +77,19 @@ export class MySqlStore {
   }
 
   async retireKey(keyId) { await this.pool.execute("UPDATE kms_keys SET status = 'retired', retired_at = CURRENT_TIMESTAMP(3) WHERE key_id = ?", [keyId]); }
+}
+
+export class MySqlLogStore {
+  constructor(pool, { limit = 5000 } = {}) { this.pool = pool; this.limit = limit; }
+  async load() { const [rows] = await this.pool.execute('SELECT payload FROM audit_logs ORDER BY position_index, id'); return rows.map((row) => parsePayload(row.payload)); }
+  async append(entry) { const entries = await this.load(); entries.push(entry); await this.replace(entries.slice(-this.limit)); return entry; }
+  async replace(entries) {
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction(); await connection.execute('DELETE FROM audit_logs');
+      let position = 0;
+      for (const entry of entries) await connection.execute('INSERT INTO audit_logs (id, payload, position_index) VALUES (?, CAST(? AS JSON), ?)', [entry.id, JSON.stringify(entry), position++]);
+      await connection.commit();
+    } catch (error) { await connection.rollback(); throw error; } finally { connection.release(); }
+  }
 }

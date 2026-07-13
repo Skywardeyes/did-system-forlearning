@@ -3,17 +3,13 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { JsonStore } from './store.js';
-import { VcService } from './vc-service.js';
-import { LogStore } from './log-store.js';
-import { LogService } from './log-service.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const publicRoot = path.join(root, 'public');
-const store = new JsonStore(process.env.DATA_FILE || path.join(root, 'data', 'store.json'));
-const service = new VcService(store);
-const defaultLogService = new LogService(new LogStore(process.env.LOG_FILE || path.join(root, 'data', 'logs.json')));
 const port = Number(process.env.PORT || 4173);
+
+const noOpLogService = { query: async () => ({ items: [], page: 1, pageSize: 10, totalItems: 0, totalPages: 1 }), get: async () => null,
+  clear: async () => ({ cleared: true }), info: async () => null, warn: async () => null, error: async () => null };
 
 const contentTypes = {
   '.html': 'text/html; charset=utf-8',
@@ -176,7 +172,7 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export function createAppServer(activeService = service, { logService = defaultLogService } = {}) { return createServer(async (request, response) => {
+export function createAppServer(activeService, { logService = noOpLogService } = {}) { return createServer(async (request, response) => {
   const correlationId = randomUUID();
   const requestService = activeService.withAuditContext
     ? activeService.withAuditContext(logService, correlationId)
@@ -195,10 +191,13 @@ export function createAppServer(activeService = service, { logService = defaultL
   }
 }); }
 
-export const server = createAppServer(service);
-
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  server.listen(port, '127.0.0.1', () => {
-    console.log(`DID/VC Learning Lab running at http://127.0.0.1:${port}`);
-  });
+  const { bootstrap } = await import('./bootstrap.js');
+  try {
+    const { server } = await bootstrap();
+    server.listen(port, '127.0.0.1', () => console.log(`DID/VC Learning Lab running at http://127.0.0.1:${port}`));
+  } catch (error) {
+    console.error(`[${error.code || 'STARTUP_FAILED'}] ${error.message}`);
+    process.exitCode = 1;
+  }
 }
