@@ -40,9 +40,25 @@ test('ordinary credential APIs do not expose salts or disclosure material', asyn
   for (const endpoint of ['/api/state', '/api/credentials?page=1&pageSize=10']) {
     const response = await fetch(`${app.url}${endpoint}`);
     const text = await response.text();
-    assert.doesNotMatch(text, /disclosureMaterial|"salt"/);
+    assert.doesNotMatch(text, /disclosureMaterial|sdJwtMaterial|"salt"/);
     assert.match(text, /selectiveDisclosureAvailable/);
   }
   const ledgerText = await (await fetch(`${app.url}/api/disclosure-verification-logs?page=1&pageSize=10`)).text();
   assert.doesNotMatch(ledgerText, /disclosureMaterial|"salt"/);
+});
+
+test('SD-JWT API generates RFC 9901 compact presentations and verifies selected disclosures', async (t) => {
+  const app = await startTestApp(t);
+  const issuer = (await post(`${app.url}/api/dids`, { name: 'Issuer', role: 'issuer' })).body;
+  const holder = (await post(`${app.url}/api/dids`, { name: 'Holder', role: 'holder' })).body;
+  const issued = (await post(`${app.url}/api/credentials`, { issuerDid: issuer.did, holderDid: holder.did, studentName: 'Hidden Name', courseName: 'SD-JWT Course', validUntil: '2099-01-01T00:00:00.000Z' })).body;
+  assert.equal(issued.sdJwtAvailable, true);
+  const generated = await post(`${app.url}/api/credentials/${encodeURIComponent(issued.id)}/sd-jwt`, { paths: ['credentialSubject.course'] });
+  assert.equal(generated.response.status, 200);
+  assert.match(generated.body.sdJwt, /~$/);
+  assert.doesNotMatch(generated.body.sdJwt, /Hidden Name/);
+  const verified = await post(`${app.url}/api/sd-jwt/verify`, { sdJwt: generated.body.sdJwt });
+  assert.equal(verified.body.valid, true);
+  const tampered = `${generated.body.sdJwt.slice(0, -2)}${generated.body.sdJwt.at(-2) === 'A' ? 'B' : 'A'}~`;
+  assert.equal((await post(`${app.url}/api/sd-jwt/verify`, { sdJwt: tampered })).body.valid, false);
 });

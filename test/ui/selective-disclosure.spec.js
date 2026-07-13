@@ -5,7 +5,7 @@ test('holder discloses selected claims, verifies them and detects tampering', as
   await resetDemo(request);
   await openView(page, 'disclosure');
 
-  await expect(page.getByRole('heading', { name: '教学版选择性披露' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: '选择性披露' })).toBeVisible();
   await expect(page.locator('#disclosure-credential')).not.toHaveValue('');
   await page.locator('input[value="credentialSubject.name"]').uncheck();
   await page.locator('input[value="credentialSubject.course"]').check();
@@ -36,4 +36,22 @@ test('holder discloses selected claims, verifies them and detects tampering', as
   await expect(page.locator('#disclosure-verification-log-table tr')).toHaveCount(1);
   await page.locator('#disclosure-log-search-clear').click();
   await expect(page.locator('#disclosure-verification-log-table tr')).toHaveCount(2);
+});
+
+test('holder generates and verifies an RFC 9901 core SD-JWT presentation', async ({ page, request }) => {
+  await resetDemo(request);
+  await openView(page, 'disclosure');
+  await page.locator('#disclosure-format').selectOption('sd-jwt');
+  await page.locator('input[value="credentialSubject.course"]').check();
+  await page.locator('input[value="credentialSubject.completionDate"]').uncheck();
+  await page.getByRole('button', { name: '生成披露证明' }).click();
+  await expect(page.locator('#disclosure-input')).toHaveValue(/"format": "sd-jwt"/);
+  await expect(page.locator('#disclosure-privacy-summary')).toContainText('SD-JWT');
+  await page.getByRole('button', { name: '验证披露证明' }).click();
+  await expect(page.locator('#disclosure-result-badge')).toHaveText('验证通过');
+  await expect(page.locator('#disclosure-results')).toContainText('Issuer JWT 签名');
+  await expect(page.locator('#disclosure-results')).toContainText('1 个披露项摘要一致');
+  await page.getByRole('button', { name: '模拟篡改课程' }).click();
+  await page.getByRole('button', { name: '验证披露证明' }).click();
+  await expect(page.locator('#disclosure-result-badge')).toHaveText('验证失败');
 });

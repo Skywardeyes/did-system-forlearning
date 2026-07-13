@@ -32,6 +32,7 @@ npm start
 - 撤销凭证并展示撤销检查失败
 - 保存最近验证记录
 - 使用随机盐、SHA-256 声明摘要和 Issuer Ed25519 签名生成教学版选择性披露证明
+- 支持 RFC 9901 核心 SD-JWT：Issuer-signed JWT、`_sd` 摘要和按需 Disclosure 紧凑串
 - 只公开选中的姓名、课程、完成日期或完成状态，未公开字段原值和盐不进入披露证明
 - 验证披露证明并保存可搜索、分页、带中文失败原因的独立验证台账
 - 私钥仅保存在本地 `data/store.json`，不会通过普通 API 返回
@@ -58,7 +59,7 @@ npm start
 npm test
 ```
 
-测试覆盖两种 Method、DID/VC 生命周期、七项完整验证、教学版选择性披露、验证台账、搜索分页和六条端到端业务旅程。当前代码已复核 Node 130/130、Chromium UI 44/44。详细结果见 [测试与人工验收.md](docs/测试与人工验收.md)。
+测试覆盖两种 Method、DID/VC 生命周期、七项完整验证、教学版选择性披露、RFC 9901 核心 SD-JWT、验证台账、搜索分页和六条端到端业务旅程。当前代码已复核 Node 132/132；Chromium UI 的 44/44 为新增 SD-JWT 页面前的最近基线，正式汇报前需执行 `npm run test:evidence` 生成最终 UI 证据。详细结果见 [测试与人工验收.md](docs/测试与人工验收.md)。
 
 ## 项目结构
 
@@ -80,7 +81,7 @@ data/store.json         本地运行数据（已被 Git 忽略）
 
 本系统参考 W3C DID Core 与 VC Data Model 2.0 的核心数据结构，实现教学演示版 DID、VC 和 proof。`did:key` 的 Ed25519 公钥指纹采用 multicodec 前缀和 base58btc 编码；完整 VC proof 使用稳定键序 JSON 和 Ed25519 签名。选择性披露使用加盐 SHA-256 声明摘要与 Ed25519 摘要清单签名。
 
-完整 VC proof 的名称为 `EducationalEd25519Signature2026`，选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、SD-JWT VC、BBS+ 或零知识证明。系统不提供生产级互操作、密钥托管、真实身份核验、链上注册或标准状态列表。
+完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统同时实现 RFC 9901 的 SD-JWT 核心格式：Issuer 使用 EdDSA 签发 JWT，Holder 可携带选中的 Disclosure；该实现尚未包含 SD-JWT VC 应用配置、Holder key binding、钱包本地保管或跨机构状态服务。系统不提供生产级密钥托管、真实身份核验、链上注册或标准状态列表。
 
 ## 配置
 

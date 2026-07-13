@@ -649,7 +649,442 @@ VC.proof.proofValue
 
 ---
 
-## 十、常见答辩问题
+## 十、选择性披露证明逐行解释
+
+### 10.1 完整验证与选择性披露的区别
+
+完整 VC 验证需要提交整张凭证：
+
+```text
+完整 VC 正文 + proof
+        ↓
+Verifier 对完整内容验签
+```
+
+选择性披露只提交本次需要公开的声明：
+
+```text
+选中字段的路径、值和随机盐
++ Issuer 签名保护的摘要清单
+        ↓
+Verifier 重算公开字段摘要并验证 Issuer 签名
+```
+
+当前系统支持四个可选择披露的声明：
+
+```text
+credentialSubject.name
+credentialSubject.course
+credentialSubject.completionDate
+credentialSubject.achievement
+```
+
+每个声明签发时都会生成独立的 16 字节随机盐，并计算：
+
+```javascript
+SHA256(stableStringify({ path, salt, value }))
+```
+
+Issuer 再对包含凭证 ID、Issuer、有效期和全部声明摘要的 Manifest 签名。
+
+需要明确：当前方案实现了真实的部分声明验证，但它是教学协议，不是 BBS+、零知识证明或正式 SD-JWT VC，也不能提供完全匿名和多次展示不可关联性。
+
+### 10.2 披露证明完整结构
+
+假设 Holder 只选择公开“课程名称”和“完成日期”，系统生成的披露证明如下。行号只用于解释，不属于 JSON 内容。
+
+```text
+01  {
+02    "type": "EducationalSelectiveDisclosurePresentation2026",
+03    "credentialId": "urn:uuid:6f1d5f9b-57b2-4abe-b441-274c67b6492a",
+04    "issuer": "did:example:550e8400-e29b-41d4-a716-446655440000",
+05    "validFrom": "2026-07-13T08:00:00.000Z",
+06    "validUntil": "2027-07-13T08:00:00.000Z",
+07    "disclosedClaims": [
+08      {
+09        "path": "credentialSubject.course",
+10        "salt": "课程字段的随机盐",
+11        "value": "数字身份与可信凭证训练营"
+12      },
+13      {
+14        "path": "credentialSubject.completionDate",
+15        "salt": "完成日期字段的随机盐",
+16        "value": "2026-07-13"
+17      }
+18    ],
+19    "claimDigests": {
+20      "credentialSubject.name": "姓名字段摘要",
+21      "credentialSubject.course": "课程字段摘要",
+22      "credentialSubject.completionDate": "完成日期字段摘要",
+23      "credentialSubject.achievement": "完成状态字段摘要"
+24    },
+25    "proof": {
+26      "type": "EducationalSelectiveDisclosureProof2026",
+27      "cryptosuite": "eddsa-salted-claims-demo-2026",
+28      "created": "2026-07-13T08:00:00.000Z",
+29      "verificationMethod": "did:example:550e8400-e29b-41d4-a716-446655440000#key-1",
+30      "keyVersion": 1,
+31      "proofPurpose": "assertionMethod",
+32      "proofValue": "Issuer对摘要清单生成的Base64URL签名"
+33    }
+34  }
+```
+
+这份证明没有出现：
+
+```text
+张晓明
+姓名字段的随机盐
+Completed
+完成状态字段的随机盐
+完整 VC 正文
+Issuer 私钥
+```
+
+但仍然包含姓名和完成状态对应的摘要，以便 Issuer 的签名一次性保护完整声明集合。
+
+### 第 1 行：`{`
+
+表示选择性披露 Presentation 是一个 JSON 对象。它不是原始 VC，也不是 DID Document。
+
+### 第 2 行：Presentation `type`
+
+```json
+"type": "EducationalSelectiveDisclosurePresentation2026"
+```
+
+作用：
+
+- 告诉系统应使用选择性披露验证流程；
+- 与完整 VC 的 `VerifiableCredential` 类型区分；
+- 防止把普通 JSON 误当成披露证明。
+
+隐私影响：通常不包含个人信息，但会暴露协议类型和凭证使用场景。
+
+### 第 3 行：`credentialId`
+
+```json
+"credentialId": "urn:uuid:6f1d5f9b-..."
+```
+
+作用：
+
+- 标识披露证明来自哪一张 VC；
+- 查询本地凭证是否 active、suspended、replaced、revoked 或 expired；
+- 写入披露证明验证台账；
+- 关联完整验证记录和披露验证记录。
+
+隐私影响：它是稳定标识。向不同 Verifier 展示同一个 `credentialId` 时，对方可能判断两次展示来自同一张凭证，因此当前方案不具备展示不可关联性。
+
+### 第 4 行：`issuer`
+
+```json
+"issuer": "did:example:550e8400-e29b-41d4-a716-446655440000"
+```
+
+作用：
+
+1. 找到 Issuer DID；
+2. 读取 DID Document；
+3. 根据验证方法找到 Ed25519 公钥；
+4. 验证摘要清单签名；
+5. 检查 Issuer 是否已停用。
+
+隐私影响：Issuer 通常不是 Holder 的直接个人信息，但签发机构本身可能暴露业务背景。例如医疗、心理咨询或特殊资格机构的 DID 也可能属于敏感元数据。
+
+### 第 5～6 行：`validFrom` 与 `validUntil`
+
+```json
+"validFrom": "2026-07-13T08:00:00.000Z",
+"validUntil": "2027-07-13T08:00:00.000Z"
+```
+
+作用：判断当前时间是否满足：
+
+```text
+validFrom ≤ 当前时间 ≤ validUntil
+```
+
+隐私影响：具体时间可能暴露签发日期、课程批次或用户活动轨迹。当前系统直接公开时间；如果只想证明“当前未过期”而不公开具体时间，需要更强的隐私证明机制。
+
+### 第 7～18 行：`disclosedClaims`
+
+```json
+"disclosedClaims": [ ... ]
+```
+
+这是 Holder 本次主动选择公开的声明数组。没有被选择的声明不会以原始值出现在数组中。
+
+#### 第 9、14 行：`path`
+
+```json
+"path": "credentialSubject.course"
+```
+
+`path` 表示公开值属于哪个业务字段。它参与摘要计算：
+
+```javascript
+stableStringify({ path, salt, value })
+```
+
+作用是防止把一个字段的值和盐挪到另一个字段。例如“完成状态”不能被冒充为“课程名称”。
+
+隐私影响：路径不会暴露具体值，但会暴露凭证包含什么类型的数据。当前 `claimDigests` 还会公开所有可披露字段的路径，所以验证方可以知道凭证存在姓名、课程、完成日期和完成状态字段。
+
+#### 第 10、15 行：`salt`
+
+```json
+"salt": "字段对应的随机盐"
+```
+
+作用：
+
+- 防止对低熵字段进行字典攻击；
+- 让相同字段值在不同凭证中得到不同摘要；
+- 与 path、value 一起重算已公开字段摘要。
+
+处理原则：
+
+```text
+已公开字段：同时提交 value 和 salt
+未公开字段：既不提交 value，也不提交 salt
+```
+
+salt 不是私钥。字段披露时可以公开；但字段未披露时，不应提前公开对应 salt。
+
+#### 第 11、16 行：`value`
+
+```json
+"value": "数字身份与可信凭证训练营"
+```
+
+这是 Holder 主动公开的业务内容。Verifier 已经能够直接读取它，随机盐不会再隐藏该值。
+
+隐私作用不是“公开后仍保密”，而是实行最小必要披露。例如为了证明完成某课程，只公开课程和完成日期，不公开姓名。
+
+### 第 19～24 行：`claimDigests`
+
+```json
+"claimDigests": {
+  "credentialSubject.name": "姓名字段摘要",
+  "credentialSubject.course": "课程字段摘要"
+}
+```
+
+每个摘要的计算过程是：
+
+```javascript
+createHash('sha256')
+  .update(stableStringify({ path, salt, value }))
+  .digest('base64url');
+```
+
+作用：
+
+1. Verifier 重算公开字段摘要并进行比较；
+2. Issuer 一次性签名全部声明承诺；
+3. Holder 可以选择不同字段组合，而不必让 Issuer 重新签发；
+4. 修改公开字段的 path、salt 或 value 都会导致摘要不一致。
+
+隐私影响：
+
+- 摘要不会直接显示隐藏字段原值；
+- 没有随机盐时，验证方难以枚举隐藏值；
+- 摘要清单长期固定，可能关联同一凭证的多次展示；
+- 明文路径会暴露凭证字段结构。
+
+### 第 25～33 行：`proof`
+
+proof 证明摘要清单和关键元数据由 Issuer 签名保护。
+
+#### 第 26 行：proof `type`
+
+```json
+"type": "EducationalSelectiveDisclosureProof2026"
+```
+
+这是项目定义的教学 proof 类型，明确区别于正式 SD-JWT VC、BBS+ 和 W3C Data Integrity cryptosuite。
+
+#### 第 27 行：`cryptosuite`
+
+```json
+"cryptosuite": "eddsa-salted-claims-demo-2026"
+```
+
+说明当前教学方案组合使用：
+
+```text
+SHA-256 加盐声明摘要
++ Stable JSON
++ Ed25519 / EdDSA 签名
+```
+
+它是项目标识，不是正式注册的密码套件名称。
+
+#### 第 28 行：`created`
+
+```json
+"created": "2026-07-13T08:00:00.000Z"
+```
+
+记录摘要清单 proof 的创建时间。它帮助审计，但具体时间也可能用于关联签发批次。
+
+#### 第 29 行：`verificationMethod`
+
+```json
+"verificationMethod": "did:example:...#key-1"
+```
+
+指向 Issuer DID Document 中的验证方法。Verifier 根据它找到当前或历史 Ed25519 公钥。
+
+如果 Issuer 已轮换密钥，旧披露证明仍引用 `#key-1`，系统可以根据历史密钥继续验证。
+
+#### 第 30 行：`keyVersion`
+
+```json
+"keyVersion": 1
+```
+
+这是项目用于解析历史密钥的版本号。它不是所有选择性披露协议的通用必需字段。
+
+#### 第 31 行：`proofPurpose`
+
+```json
+"proofPurpose": "assertionMethod"
+```
+
+表示 Issuer 使用 DID Document 中被授权作出声明的验证方法签名摘要清单。
+
+#### 第 32 行：`proofValue`
+
+```json
+"proofValue": "Issuer对摘要清单生成的签名"
+```
+
+Issuer 实际签名的 Manifest 为：
+
+```json
+{
+  "type": "EducationalSelectiveDisclosureManifest2026",
+  "credentialId": "urn:uuid:...",
+  "issuer": "did:example:...",
+  "validFrom": "...",
+  "validUntil": "...",
+  "claimDigests": {
+    "...": "..."
+  }
+}
+```
+
+因此，攻击者不能在不破坏签名的情况下修改：
+
+- credentialId；
+- issuer；
+- validFrom 或 validUntil；
+- claimDigests 中的任一摘要。
+
+数字签名本身不会泄露 Issuer 私钥或隐藏字段原值，但固定 `proofValue` 也可以成为多次展示的关联线索。
+
+### 第 34 行：`}`
+
+表示选择性披露 Presentation 结束。
+
+### 10.3 签发端保存但普通 API 不返回的材料
+
+系统内部还保存：
+
+```json
+{
+  "disclosureMaterial": {
+    "claims": {
+      "credentialSubject.name": {
+        "salt": "姓名盐",
+        "value": "张晓明"
+      }
+    },
+    "manifest": {
+      "claimDigests": {}
+    },
+    "proof": {
+      "proofValue": "Issuer签名"
+    }
+  }
+}
+```
+
+`publicCredential()` 会删除 `disclosureMaterial`，普通状态和凭证 API 只返回：
+
+```json
+{
+  "selectiveDisclosureAvailable": true
+}
+```
+
+这个布尔值只告诉页面该凭证是否支持选择性披露，不泄露完整声明、隐藏字段随机盐或签发端材料。
+
+### 10.4 披露证明的八项验证
+
+| 序号 | 检查项 | 使用字段 | 作用 |
+|---:|---|---|---|
+| 1 | 披露证明格式 | type、credentialId、issuer、claims、proof | 拒绝结构不完整的证明 |
+| 2 | Issuer DID 解析 | issuer | 找到签发方身份 |
+| 3 | Issuer DID 状态 | DID status | 拒绝已停用签发方 |
+| 4 | 签名密钥解析 | verificationMethod、keyVersion | 找到当前或历史公钥 |
+| 5 | 摘要清单签名 | Manifest、proofValue | 防止摘要和元数据被替换 |
+| 6 | 已披露字段摘要 | path、salt、value、claimDigests | 检测公开字段篡改 |
+| 7 | 凭证有效期 | validFrom、validUntil | 拒绝未生效或过期凭证 |
+| 8 | 凭证当前状态 | credentialId、本地状态 | 拒绝暂停、替换、撤销或过期凭证 |
+
+最终结果仍然采用：
+
+```javascript
+valid = checks.every((item) => item.passed);
+```
+
+每次验证后，系统在披露证明验证台账中保存：
+
+```json
+{
+  "credentialId": "urn:uuid:...",
+  "valid": false,
+  "checkedAt": "...",
+  "disclosedPaths": [
+    "credentialSubject.course",
+    "credentialSubject.completionDate"
+  ],
+  "failedChecks": ["disclosedClaims"]
+}
+```
+
+台账不保存完整 Presentation，也不保存披露字段的值和随机盐，只保存定位和解释验证结果所需的元数据。
+
+### 10.5 各字段的隐私与关联风险总结
+
+| 字段 | 验证用途 | 是否公开 | 隐私或关联风险 |
+|---|---|---:|---|
+| `type` | 选择验证规则 | 是 | 暴露协议和业务类型 |
+| `credentialId` | 查询状态、写台账 | 是 | 可关联同一凭证的多次展示 |
+| `issuer` | 查找 DID 与公钥 | 是 | 可能暴露签发机构和业务背景 |
+| `validFrom` | 判断生效 | 是 | 暴露签发时间或批次 |
+| `validUntil` | 判断过期 | 是 | 暴露有效期限 |
+| `path` | 绑定字段含义 | 选中字段公开；摘要键还暴露全部路径 | 暴露凭证字段结构 |
+| `value` | 本次公开声明 | 仅选中字段公开 | 公开后无法依靠 salt 收回 |
+| `salt` | 防枚举并重算摘要 | 仅选中字段公开 | 与 value 同时公开后不再隐藏该字段 |
+| `claimDigests` | 证明声明属于原凭证 | 是 | 固定集合可用于关联多次展示 |
+| `verificationMethod` | 找到 Issuer 公钥 | 是 | 可关联 Issuer 与密钥版本 |
+| `keyVersion` | 解析历史密钥 | 是 | 可能推断签发时期 |
+| `proofValue` | 验证 Issuer 签名 | 是 | 固定签名可用于关联 |
+| 未选字段原值 | Holder 隐私 | 否 | 当前主要保护目标 |
+| 未选字段 salt | 防止枚举隐藏值 | 否 | 提前泄露会降低隐藏值保护 |
+| Issuer 私钥 | 生成签名 | 否 | 必须永久保密 |
+
+最准确的项目结论是：
+
+> 当前方案实现了未选择字段值的最小化披露和篡改检测，但没有隐藏凭证 ID、Issuer、有效期、摘要集合和固定签名，因此不是完全匿名，也不具备 BBS+ 随机化派生证明所提供的展示不可关联性。
+
+---
+
+## 十一、常见答辩问题
 
 ### 1. DID Document 中为什么没有私钥？
 
@@ -679,12 +1114,24 @@ VC.proof.proofValue
 
 不是。本项目参考 DID Core 和 VC Data Model 2.0 的核心数据结构，但 proof 类型 `EducationalEd25519Signature2026` 和 cryptosuite `eddsa-stable-json-demo-2026` 是教学标识。系统没有实现生产级 DID 解析网络、正式 Data Integrity cryptosuite、状态列表、密钥托管和跨平台互操作认证。
 
+### 8. 选择性披露为什么需要随机盐？
+
+如果只计算 `SHA-256(value)`，验证方可以枚举“通过、未通过、Completed”等低熵候选值并比较摘要。随机盐把摘要计算扩展为路径、随机盐和值的组合；未披露字段不提供 salt，验证方难以通过字典攻击反推原值。
+
+### 9. 选择性披露是否等于完全匿名？
+
+不等于。当前证明仍公开 credentialId、issuer、有效期、摘要清单、验证方法和固定签名，不同 Verifier 可能据此关联同一张凭证。系统保护的是未选择字段的原始值和随机盐，而不是隐藏所有元数据。
+
+### 10. 当前方案与正式 SD-JWT 或 BBS+ 有什么区别？
+
+当前方案与 SD-JWT 都采用加盐摘要和 Issuer 签名的基本思路，但没有使用 RFC 9901 的标准 Disclosure、`_sd`、JWS 组合格式和 Holder Key Binding。它也不是 BBS+ 多消息签名和随机化零知识派生证明，因此应称为教学版选择性披露。
+
 ---
 
-## 十一、汇报时的 60 秒讲法
+## 十二、汇报时的 60 秒讲法
 
 > DID 是身份标识，DID Document 是它的公开说明书，其中包含验证方法和 Ed25519 公钥，但不包含私钥。Issuer 签发 VC 时，会把自己的 DID 写入 issuer，把 Holder DID 和课程成果写入 credentialSubject，再使用私钥对稳定序列化后的 VC 内容签名，签名结果保存在 proofValue 中。验证方根据 VC 的 issuer 找到 DID Document，再根据 proof 中的 verificationMethod 找到公钥进行验签。内容一旦被修改，签名就会失败。但签名正确只证明来源和完整性，所以系统还要检查 DID 状态、有效期和 VC 生命周期状态，七项全部通过才返回有效。
 
-## 十二、汇报时的 20 秒讲法
+## 十三、汇报时的 20 秒讲法
 
 > DID 表示“是谁”，DID Document 提供公开验证方法，VC 表示“谁向谁证明了什么”。Issuer 用私钥签名 VC，Verifier 用 DID Document 中的公钥验签；然后再结合有效期和凭证状态，得到最终验证结果。

@@ -56,3 +56,20 @@ test('service rejects empty, unsupported and legacy disclosure requests', async 
   await store.save(state);
   await assert.rejects(() => service.createDisclosurePresentation(record.id, ['credentialSubject.course']), /重新签发/);
 });
+
+test('service creates RFC 9901 core SD-JWT presentations without undisclosed values', async (t) => {
+  const { service } = await createFixture(t);
+  const { issuer, holder } = await createDidPair(service);
+  const record = await issueValidCredential(service, issuer, holder, { studentName: 'Alice', courseName: 'SD-JWT Course' });
+  const sdJwt = await service.createSdJwtPresentation(record.id, ['credentialSubject.course']);
+  assert.match(sdJwt, /~$/);
+  assert.match(sdJwt, /^[^.~]+\.[^.~]+\.[^.~]+~/);
+  assert.doesNotMatch(sdJwt, /Alice/);
+  const result = await service.verifySdJwtPresentation(sdJwt);
+  assert.equal(result.valid, true);
+  assert.equal(result.format, 'sd-jwt');
+  await service.rotateDidKey(issuer.id, { expectedVersion: issuer.version });
+  assert.equal((await service.verifySdJwtPresentation(sdJwt)).valid, true);
+  const tampered = `${sdJwt.slice(0, -2)}${sdJwt.at(-2) === 'A' ? 'B' : 'A'}~`;
+  assert.equal((await service.verifySdJwtPresentation(tampered)).valid, false);
+});

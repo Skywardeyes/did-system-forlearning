@@ -1,10 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import {
   createClaimDigest,
   createDidKeyMaterial,
   createDisclosureSalt,
+  createSdJwtDisclosure,
   signCredential,
+  signCompactJwt,
   signPayload,
+  verifyCompactJwt,
   verifyCredentialSignature,
   verifyPayload,
 } from './crypto.js';
@@ -24,6 +27,13 @@ const DISCLOSABLE_CLAIMS = Object.freeze([
   'credentialSubject.completionDate',
   'credentialSubject.achievement',
 ]);
+const SD_JWT_CLAIMS = Object.freeze({
+  'credentialSubject.name': 'name',
+  'credentialSubject.course': 'course',
+  'credentialSubject.completionDate': 'completion_date',
+  'credentialSubject.achievement': 'achievement',
+});
+const SD_JWT_PATHS = Object.freeze(Object.fromEntries(Object.entries(SD_JWT_CLAIMS).map(([path, claim]) => [claim, path])));
 const AUDIT_ACTIONS = {
   createDid: ['DID_CREATE', 'DID'],
   updateDid: ['DID_UPDATE', 'DID'],
@@ -37,6 +47,8 @@ const AUDIT_ACTIONS = {
   verifyCredential: ['VC_VERIFY', 'VERIFY'],
   createDisclosurePresentation: ['VC_DISCLOSE', 'VC'],
   verifyDisclosurePresentation: ['VC_DISCLOSURE_VERIFY', 'VERIFY'],
+  createSdJwtPresentation: ['VC_SD_JWT_CREATE', 'VC'],
+  verifySdJwtPresentation: ['VC_SD_JWT_VERIFY', 'VERIFY'],
   resetDemo: ['DEMO_RESET', 'SYSTEM'],
 };
 
@@ -63,7 +75,7 @@ export class VcService {
       this[method] = async (...args) => {
         try {
           const result = await operation(...args);
-          const verificationFailed = method === 'verifyCredential' && !result.valid;
+          const verificationFailed = method.startsWith('verify') && !result.valid;
           await this.logAudit(verificationFailed ? 'warn' : 'info', {
             action,
             module,
@@ -92,8 +104,8 @@ export class VcService {
       return { targetType: 'DID', targetId: result?.did || null, targetName: result?.name || args[0]?.name || null, context: { method: result?.method || args[0]?.method || 'example', role: result?.role || args[0]?.role || null } };
     }
     if (method.includes('Did')) return { targetType: 'DID', targetId: result?.did || args[0] || null, targetName: result?.name || null, context: { version: result?.version || null } };
-    const targetId = method === 'verifyCredential' ? (result?.credentialId || args[0]?.id) : (result?.id || args[0]);
-    return { targetType: method === 'resetDemo' ? 'SYSTEM' : 'VC', targetId: targetId || null, targetName: null, context: method === 'verifyCredential' ? { failedChecks: result?.checks?.filter((item) => !item.passed).map((item) => item.key) || [] } : {} };
+    const targetId = method.startsWith('verify') ? (result?.credentialId || args[0]?.id) : (result?.id || args[0]);
+    return { targetType: method === 'resetDemo' ? 'SYSTEM' : 'VC', targetId: targetId || null, targetName: null, context: method.startsWith('verify') ? { failedChecks: result?.checks?.filter((item) => !item.passed).map((item) => item.key) || [] } : {} };
   }
 
   async logAudit(level, entry) {
@@ -309,6 +321,21 @@ export class VcService {
         proofPurpose: 'assertionMethod',
         proofValue: signPayload(disclosureManifest, issuer.privateJwk),
       };
+      const sdJwtDisclosures = Object.fromEntries(Object.entries(SD_JWT_CLAIMS).map(([path, claimName]) => {
+        const value = credential.credentialSubject[path.slice('credentialSubject.'.length)];
+        return [path, createSdJwtDisclosure(claimName, value)];
+      }));
+      const sdJwtPayload = {
+        iss: issuer.did,
+        jti: id,
+        iat: Math.floor(now.getTime() / 1000),
+        nbf: Math.floor(now.getTime() / 1000),
+        exp: Math.floor(validUntil.getTime() / 1000),
+        vct: 'TrainingCompletionCredential',
+        _sd_alg: 'sha-256',
+        _sd: Object.values(sdJwtDisclosures).map((item) => item.digest),
+      };
+      const sdJwt = signCompactJwt({ alg: 'EdDSA', typ: 'vc+sd-jwt', kid: issuer.document.assertionMethod[0], keyVersion: issuer.keyVersion || 1 }, sdJwtPayload, issuer.privateJwk);
 
       const record = {
         id,
@@ -322,6 +349,7 @@ export class VcService {
         replacedBy: null,
         replaces,
         disclosureMaterial: { claims, manifest: disclosureManifest, proof: disclosureProof },
+        sdJwtMaterial: { issuerJwt: sdJwt, disclosures: sdJwtDisclosures },
       };
       state.credentials.push(record);
       return record;
@@ -357,6 +385,18 @@ export class VcService {
       claimDigests: structuredClone(manifest.claimDigests),
       proof: structuredClone(proof),
     };
+  }
+
+  async createSdJwtPresentation(id, paths) {
+    const selectedPaths = [...new Set(Array.isArray(paths) ? paths : [])];
+    if (!selectedPaths.length) throw new Error('请至少选择一个披露字段');
+    if (selectedPaths.some((path) => !DISCLOSABLE_CLAIMS.includes(path))) throw new Error('包含不允许披露的字段');
+    const state = await this.store.load();
+    const record = state.credentials.find((item) => item.id === id);
+    if (!record?.sdJwtMaterial) throw new Error('该凭证不包含 SD-JWT 材料，请重新签发');
+    const disclosures = selectedPaths.map((path) => record.sdJwtMaterial.disclosures[path]?.disclosure);
+    if (disclosures.some((item) => !item)) throw new Error('SD-JWT 披露字段不完整');
+    return `${record.sdJwtMaterial.issuerJwt}~${disclosures.join('~')}~`;
   }
 
   resolveIssuerKey(issuer, proof) {
@@ -437,6 +477,71 @@ export class VcService {
       disclosedPaths: disclosures.map((item) => item?.path).filter(Boolean),
       failedChecks: checks.filter((item) => !item.passed).map((item) => item.key),
     });
+    state.disclosureVerificationLogs = state.disclosureVerificationLogs.slice(-100);
+    await this.store.save(state);
+    return result;
+  }
+
+  async verifySdJwtPresentation(sdJwtPresentation) {
+    const state = await this.store.load();
+    const parts = String(sdJwtPresentation || '').split('~');
+    const issuerJwt = parts.shift();
+    const trailing = parts.pop();
+    const disclosures = parts;
+    const formatPassed = Boolean(issuerJwt && trailing === '' && disclosures.length);
+    let parsed = null;
+    try { parsed = issuerJwt ? issuerJwt.split('.').length === 3 ? issuerJwt : null : null; } catch { parsed = null; }
+    let unverifiedPayload = null;
+    let unverifiedHeader = null;
+    try { unverifiedPayload = parsed ? JSON.parse(Buffer.from(parsed.split('.')[1], 'base64url').toString('utf8')) : null; } catch { unverifiedPayload = null; }
+    try { unverifiedHeader = parsed ? JSON.parse(Buffer.from(parsed.split('.')[0], 'base64url').toString('utf8')) : null; } catch { unverifiedHeader = null; }
+    const issuer = state.dids.find((item) => item.did === unverifiedPayload?.iss && item.role === 'issuer');
+    const issuerResolved = Boolean(issuer);
+    const issuerActive = issuerResolved && issuer.status !== 'deactivated';
+    const keyRecord = this.resolveIssuerKey(issuer, { keyVersion: unverifiedHeader?.keyVersion, verificationMethod: unverifiedHeader?.kid });
+    let jwt = null;
+    let signaturePassed = false;
+    try {
+      if (keyRecord) {
+        jwt = verifyCompactJwt(issuerJwt, keyRecord.publicJwk);
+        signaturePassed = jwt.valid && jwt.header?.alg === 'EdDSA' && jwt.header?.typ === 'vc+sd-jwt';
+      }
+    } catch { signaturePassed = false; }
+    const payload = jwt?.payload || unverifiedPayload || {};
+    const record = state.credentials.find((item) => item.id === payload.jti);
+    const uniqueDisclosures = new Set(disclosures);
+    let disclosurePassed = formatPassed && uniqueDisclosures.size === disclosures.length && payload._sd_alg === 'sha-256' && Array.isArray(payload._sd);
+    const disclosedPaths = [];
+    const seenClaims = new Set();
+    if (disclosurePassed) {
+      for (const disclosure of disclosures) {
+        try {
+          const decoded = JSON.parse(Buffer.from(disclosure, 'base64url').toString('utf8'));
+          const [salt, claimName, value] = decoded;
+          const path = SD_JWT_PATHS[claimName];
+          const actualDigest = createHash('sha256').update(disclosure).digest('base64url');
+          if (!salt || !path || seenClaims.has(claimName) || !payload._sd.includes(actualDigest) || value === undefined) { disclosurePassed = false; break; }
+          seenClaims.add(claimName); disclosedPaths.push(path);
+        } catch { disclosurePassed = false; break; }
+      }
+    }
+    const now = Math.floor(Date.now() / 1000);
+    const validityPassed = Number.isFinite(payload.nbf) && Number.isFinite(payload.exp) && payload.nbf <= now && now <= payload.exp;
+    const effectiveStatus = record && Date.parse(record.credential.validUntil) < Date.now() && !['replaced', 'revoked'].includes(record.status) ? 'expired' : record?.status;
+    const statusPassed = Boolean(record) && effectiveStatus === 'active';
+    const checks = [
+      resultItem('format', 'SD-JWT 格式', formatPassed, formatPassed ? '紧凑序列化结构完整' : 'SD-JWT 格式无效或缺少结尾分隔符'),
+      resultItem('issuer', 'Issuer DID 解析', issuerResolved, issuerResolved ? '已找到签发方' : '签发方 DID 不存在'),
+      resultItem('didStatus', 'Issuer DID 状态', issuerActive, issuerActive ? '签发方当前有效' : '签发方已停用或不存在'),
+      resultItem('keyVersion', '签名密钥解析', Boolean(keyRecord), keyRecord ? '已解析当前或历史公钥' : '验证方法或密钥版本不可用'),
+      resultItem('signature', 'Issuer JWT 签名', signaturePassed, signaturePassed ? 'EdDSA JWS 签名有效' : 'JWT 签名、alg 或 typ 无效'),
+      resultItem('disclosedClaims', 'SD-JWT 披露摘要', disclosurePassed, disclosurePassed ? `${disclosedPaths.length} 个披露项摘要一致` : '披露项重复、格式无效或摘要不匹配'),
+      resultItem('validity', '凭证有效期', validityPassed, validityPassed ? `有效至 ${new Date(payload.exp * 1000).toISOString()}` : '凭证尚未生效、已经过期或时间格式无效'),
+      resultItem('credentialStatus', '凭证当前状态', statusPassed, statusPassed ? '凭证当前有效' : `凭证状态为 ${effectiveStatus || 'missing'}`),
+    ];
+    const result = { valid: checks.every((item) => item.passed), credentialId: payload.jti || null, checkedAt: new Date().toISOString(), checks, format: 'sd-jwt' };
+    state.disclosureVerificationLogs ||= [];
+    state.disclosureVerificationLogs.push({ id: randomUUID(), credentialId: result.credentialId, valid: result.valid, checkedAt: result.checkedAt, format: 'sd-jwt', disclosedPaths, failedChecks: checks.filter((item) => !item.passed).map((item) => item.key) });
     state.disclosureVerificationLogs = state.disclosureVerificationLogs.slice(-100);
     await this.store.save(state);
     return result;

@@ -71,7 +71,7 @@
       <div class="hero-meta">
         <div><b>20 分钟</b><span>两人合作汇报</span></div>
         <div><b>5 个阶段</b><span>软件工程主线</span></div>
-        <div><b>124 / 124</b><span>最新 Node 测试通过</span></div>
+        <div><b>132 / 132</b><span>最新 Node 测试通过</span></div>
       </div>
     </div>
   </section>
@@ -260,7 +260,7 @@ flowchart TB
   M --> D
   X --> V
       </pre></div>
-      <div class="callout"><strong>隐私与边界：</strong>披露证明只包含选中字段的值与盐，未选字段只保留签名保护的摘要；普通 API 不返回完整披露材料。该方案真实支持部分声明验证，但属于教学协议，不是 BBS+、零知识证明或正式 SD-JWT VC。</div>
+      <div class="callout"><strong>隐私与边界：</strong>系统保留教学版摘要证明，并新增 RFC 9901 核心 SD-JWT：Issuer-signed JWT 保存 <code>_sd</code> 摘要，Holder 仅携带本次所需的 Disclosure。普通 API 不返回完整披露材料。教学版方案不是 BBS+ 或零知识证明；SD-JWT 当前未实现 Holder key binding、钱包本地生成或正式 SD-JWT VC 应用配置。</div>
 
       <div class="subsection diagram"><div class="diagram-title"><h3>VC 签发与验证时序图</h3><span>从页面操作到签名、存储、验证和日志</span></div>
         <pre class="mermaid">
@@ -353,7 +353,7 @@ flowchart TB
   S -.横向覆盖.-> U
       </pre></div>
       <div class="subsection metric-row">
-        <div class="metric"><b>130/130</b><span>最新 Node 测试，本轮实际通过</span></div><div class="metric"><b>44/44</b><span>Chromium UI 本轮实际通过</span></div><div class="metric"><b>20/20</b><span>proof 篡改稳定性循环</span></div><div class="metric"><b>6</b><span>端到端核心业务旅程</span></div>
+        <div class="metric"><b>132/132</b><span>最新 Node 测试，本轮实际通过</span></div><div class="metric"><b>44/44</b><span>Chromium UI：SD-JWT 前基线，待复跑</span></div><div class="metric"><b>20/20</b><span>proof 篡改稳定性循环</span></div><div class="metric"><b>6</b><span>端到端核心业务旅程</span></div>
       </div>
       <div class="subsection"><h3>各层测试解决什么问题</h3><div class="table-wrap"><table><thead><tr><th>层级</th><th>重点</th><th>代表性问题</th></tr></thead><tbody>
         <tr><td>单元</td><td>Stable JSON、Base58、Ed25519、加盐摘要、分页、脱敏</td><td>摘要能否稳定生成并检测值、盐和路径变化？</td></tr><tr><td>集成</td><td>Store、Log、DID/VC 与披露服务协作</td><td>密钥轮换后旧披露证明能否验证？撤销后是否失败？</td></tr><tr><td>API</td><td>全部路由、状态码、披露生成验证和分页契约</td><td>未披露值与随机盐是否从普通 API 隔离？</td></tr><tr><td>功能</td><td>四种 Method 组合、完整生命周期、选择性披露</td><td>公开字段篡改是否失败？披露台账是否记录原因？</td></tr><tr><td>安全</td><td>私钥、披露材料、XSS、原型污染、目录穿越</td><td>公开 API 或日志是否泄露敏感数据？</td></tr><tr><td>UI</td><td>六个入口、表单、台账、验证原因、日志、响应式</td><td>真实用户能否生成、验证并篡改披露证明？</td></tr>
@@ -389,11 +389,11 @@ flowchart LR
   class H,V,Q trust
       </pre></div>
       <div class="callout"><strong>证据含义：</strong>批次记录 Git 提交、工作区状态、运行环境、阶段退出码、用例统计和原始输出；SHA-256 清单可以发现证据文件缺失、新增或内容被修改。</div>
-      <div class="callout warn"><strong>当前口径：</strong>当前代码已实际复核 Node 130/130、Chromium UI 44/44；其中包含选择性披露生成、隐藏字段不外发、摘要篡改、历史密钥、凭证撤销、验证台账与移动布局。正式汇报前仍应执行 <code>npm run test:evidence</code> 生成最终证据批次。</div>
+      <div class="callout warn"><strong>当前口径：</strong>当前代码已实际复核 Node 132/132，其中新增 RFC 9901 核心 SD-JWT 的生成、验签、篡改和公开边界测试；Chromium UI 44/44 为新增 SD-JWT 页面前基线。正式汇报前必须执行 <code>npm run test:evidence</code> 生成最终 Node 与 UI 证据批次。</div>
     </section>
 
     <section class="section" id="demo">
-      <div class="section-head"><div class="section-no">06</div><div><div class="eyebrow">LIVE DEMO</div><h2>产品全流程演示</h2><p class="section-intro">演示控制在约 7 分钟，以一张结业 VC 为主线，观察正常、篡改、暂停、恢复、替换和撤销状态。</p></div></div>
+      <div class="section-head"><div class="section-no">06</div><div><div class="eyebrow">LIVE DEMO</div><h2>产品全流程演示</h2><p class="section-intro">以一张结业 VC 为主线，观察正常、篡改、暂停、恢复、替换和撤销状态。</p></div></div>
       <div class="demo-script">
         <div class="demo-step"><div><h3>重置并载入演示数据</h3><p>生成“可信学习中心”Issuer、“张晓明”Holder 和初始结业 VC。</p></div><div class="time">00:25</div></div>
         <div class="demo-step"><div><h3>查看 DID 与 DID Document</h3><p>指出 did:example、did:key、公钥、verificationMethod 和 capabilities。</p></div><div class="time">00:45</div></div>
