@@ -71,7 +71,7 @@
       <div class="hero-meta">
         <div><b>20 分钟</b><span>两人合作汇报</span></div>
         <div><b>5 个阶段</b><span>软件工程主线</span></div>
-        <div><b>132 / 132</b><span>最新 Node 测试通过</span></div>
+        <div><b>220 / 220</b><span>最新 Node 测试通过</span></div>
       </div>
     </div>
   </section>
@@ -474,6 +474,15 @@ flowchart LR
       <div class="subsection"><h3>AI 与人的职责划分</h3><div class="table-wrap"><table><thead><tr><th>阶段</th><th>AI 辅助</th><th>人工负责</th><th>项目证据</th></tr></thead><tbody>
         <tr><td>需求分析</td><td>解释概念、整理角色与异常场景</td><td>选择课程场景、定义 MVP</td><td>PRD、MVP、Method 选型</td></tr><tr><td>总体设计</td><td>比较架构、建议模块边界</td><td>决定本地 Node.js + JSON</td><td>开发方案与任务拆解</td></tr><tr><td>详细设计</td><td>生成数据、状态机和接口草案</td><td>审核业务合法性与标准边界</td><td>specs、plans、测试用例</td></tr><tr><td>编码实现</td><td>提供函数草案和重构建议</td><td>阅读、集成、运行和修正</td><td>src、public、Git 提交</td></tr><tr><td>系统测试</td><td>补充测试、分析失败输出</td><td>复现问题、判断测试有效性</td><td>test、缺陷报告、证据批次</td></tr>
       </tbody></table></div></div>
+      <div class="subsection">
+        <h3>从 BDD、SDD、TDD 反向审视项目</h3>
+        <div class="callout"><strong>学习反思：</strong>老师上课说过 BDD、SDD、TDD。我们从这个角度反向思考项目：系统以 <strong>SDD（规格驱动开发）</strong>为主线，用需求表、状态机、数据模型和接口契约先定义“系统应当怎样”；测试设计采用 <strong>BDD（行为驱动）</strong>思维，把用户可观察的业务规则写成场景；在新增功能和修复缺陷时，补充失败用例、实现代码并回归，因而具有<strong>局部 TDD（测试驱动开发）</strong>特征，但不宣称全项目严格按 TDD 从零开发。</div>
+        <div class="table-wrap"><table><thead><tr><th>方法</th><th>本项目如何体现</th><th>可复核证据</th></tr></thead><tbody>
+          <tr><td>SDD：规格驱动</td><td>先定义 DID/VC 角色、七项验证、VC 状态机、字段结构和 REST 接口契约。</td><td>需求表、ER 图、时序图、<code>VC_TRANSITIONS</code>、API 测试。</td></tr>
+          <tr><td>BDD：行为驱动</td><td>用“暂停后验证失败、恢复后成功”“篡改后签名失败”“撤销后不可恢复”等用户可观察结果描述需求。</td><td>生命周期旅程、端到端场景、选择性披露验证台账。</td></tr>
+          <tr><td>局部 TDD：测试驱动迭代</td><td>例如修复“暂停 VC 仍可生成披露”时，先增加教学版与 SD-JWT 都应拒绝的测试，再加入状态校验并回归。</td><td>集成/API 回归用例；当前 Node 自动化测试 134/134 通过。</td></tr>
+        </tbody></table></div>
+      </div>
       <div class="subsection grid-3">
         <div class="card"><span class="tag">技术学习</span><h3>理解验证的多个层次</h3><p>签名、身份、时间和状态分别回答不同问题，不能合并为一个“验签成功”。</p></div><div class="card"><span class="tag">工程学习</span><h3>用状态机和测试描述需求</h3><p>把“应该怎样”转化为合法转换、接口契约和自动化断言。</p></div><div class="card"><span class="tag">AI 学习</span><h3>输出必须经过证据闭环</h3><p>AI 建议只有经过阅读、运行、测试和人工判断后，才能成为项目结论。</p></div>
       </div>
