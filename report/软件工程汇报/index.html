@@ -93,26 +93,23 @@
       </div>
 
       <div class="subsection">
-        <div class="diagram"><div class="diagram-title"><h3>业务角色与用例图</h3><span>谁使用系统，以及分别完成什么操作</span></div>
+        <div class="diagram"><div class="diagram-title"><h3>业务角色与用例图</h3><span>黄色为系统外角色，蓝色为“信证台”内的具体用例</span></div>
           <pre class="mermaid">
-flowchart LR
+flowchart TB
   I["Issuer<br/>签发机构"]
   H["Holder<br/>凭证持有者"]
   V["Verifier<br/>验证方"]
   A["Admin<br/>系统管理员"]
 
-  subgraph SYS["信证台：DID / VC 本地演示系统"]
-    direction TB
-    U1((创建 DID 身份))
-    U2((更新、轮换、停用 DID))
-    U3((签发培训结业 VC))
-    U4((管理 VC 生命周期))
-    U5((完整 VC 七项验证))
-    U6((按需生成选择性披露))
-    U7((验证教学版证明或 SD-JWT))
-    U8((查看披露台账与审计日志))
-    U9((重置并生成演示数据))
-  end
+  U1((创建 DID 身份))
+  U2((更新、轮换、停用 DID))
+  U3((签发培训结业 VC))
+  U4((管理 VC 生命周期))
+  U5((完整 VC 七项验证))
+  U6((按需生成选择性披露))
+  U7((验证教学版证明或 SD-JWT))
+  U8((查看披露台账与审计日志))
+  U9((重置并生成演示数据))
 
   I --> U1
   I --> U2
@@ -125,6 +122,10 @@ flowchart LR
   V --> U8
   A --> U8
   A --> U9
+  classDef actor fill:#fff4d6,stroke:#d68a00,stroke-width:2px,color:#4a3000
+  classDef usecase fill:#e8f0ff,stroke:#2457d6,stroke-width:2px,color:#10204a
+  class I,H,V,A actor
+  class U1,U2,U3,U4,U5,U6,U7,U8,U9 usecase
           </pre>
         </div>
       </div>
