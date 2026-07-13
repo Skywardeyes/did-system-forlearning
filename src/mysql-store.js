@@ -7,13 +7,24 @@ const COLLECTIONS = [
 const parsePayload = (value) => typeof value === 'string' ? JSON.parse(value) : structuredClone(value);
 
 export class MySqlStore {
-  constructor(pool) { this.pool = pool; this.transactionQueue = Promise.resolve(); }
+  constructor(pool, { envelopeCrypto = null } = {}) { this.pool = pool; this.envelopeCrypto = envelopeCrypto; this.transactionQueue = Promise.resolve(); }
+
+  encodeItem(table, id, item) {
+    if (!this.envelopeCrypto || !['dids', 'credentials'].includes(table)) return item;
+    return { __encrypted: this.envelopeCrypto.encryptJson(item, { recordType: table, recordId: id }) };
+  }
+
+  decodeItem(table, id, payload) {
+    if (!payload?.__encrypted) return payload;
+    if (!this.envelopeCrypto) throw new Error(`Encrypted ${table} data requires envelope crypto`);
+    return this.envelopeCrypto.decryptJson(payload.__encrypted, { recordType: table, recordId: id });
+  }
 
   async load(executor = this.pool) {
     const state = structuredClone(EMPTY_STATE);
     for (const [property, table] of COLLECTIONS) {
       const [rows] = await executor.execute(`SELECT payload FROM ${table} ORDER BY position_index, id`);
-      state[property] = rows.map((row) => parsePayload(row.payload));
+      state[property] = rows.map((row) => this.decodeItem(table, String(row.id || ''), parsePayload(row.payload)));
     }
     return state;
   }
@@ -34,7 +45,8 @@ export class MySqlStore {
           let position = 0;
           for (const item of state[property] || []) {
             const id = String(item.id || item.credentialId || `${property}-${position}`);
-            await connection.execute(`INSERT INTO ${table} (id, payload, position_index) VALUES (?, CAST(? AS JSON), ?)`, [id, JSON.stringify(item), position++]);
+            const stored = this.encodeItem(table, id, item);
+            await connection.execute(`INSERT INTO ${table} (id, payload, position_index) VALUES (?, CAST(? AS JSON), ?)`, [id, JSON.stringify(stored), position++]);
           }
         }
         await connection.commit();

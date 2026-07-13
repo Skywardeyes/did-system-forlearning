@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { MySqlStore } from '../../src/mysql-store.js';
+import { createEnvelopeCrypto } from '../../src/envelope-crypto.js';
 
 class FakeConnection {
   events = [];
@@ -34,4 +35,18 @@ test('rolls back failed updates', async () => {
   const store = new MySqlStore({ getConnection: async () => connection, execute: (...args) => connection.execute(...args) });
   await assert.rejects(() => store.update(() => { throw new Error('stop'); }), /stop/);
   assert.equal(connection.events.includes('ROLLBACK'), true);
+});
+
+test('encrypts DID private keys and credential records before persistence', async () => {
+  const connection = new FakeConnection();
+  const envelope = createEnvelopeCrypto({ keys: new Map([['v1', Buffer.alloc(32, 4)]]), activeKeyId: 'v1' });
+  const store = new MySqlStore({ getConnection: async () => connection, execute: (...args) => connection.execute(...args) }, { envelopeCrypto: envelope });
+  await store.update((state) => {
+    state.dids.push({ id: 'did-1', privateJwk: { d: 'PRIVATE-D-7F29' } });
+    state.credentials.push({ id: 'vc-1', credential: { credentialSubject: { name: 'PRIVATE-STUDENT-7F29' } } });
+  });
+  assert.doesNotMatch(JSON.stringify(connection.rows), /PRIVATE-D-7F29|PRIVATE-STUDENT-7F29/);
+  const loaded = await store.load();
+  assert.equal(loaded.dids[0].privateJwk.d, 'PRIVATE-D-7F29');
+  assert.equal(loaded.credentials[0].credential.credentialSubject.name, 'PRIVATE-STUDENT-7F29');
 });
