@@ -32,7 +32,7 @@
       <main>
         <header class="topbar">
           <div><p class="eyebrow">TRAINING CREDENTIAL CONSOLE</p><h1 id="page-title">运行总览</h1></div>
-          <div class="top-status"><span>Ed25519</span><span>did:key</span><span id="clock"></span></div>
+          <div class="top-status"><span id="session-status">正在建立会话…</span><span>Ed25519</span><span>did:key</span><span id="clock"></span></div>
         </header>
 
         <section class="view active" id="view-overview">
@@ -142,7 +142,6 @@
                 <label><input type="checkbox" value="credentialSubject.name" /><span>学员姓名</span></label>
                 <label><input type="checkbox" value="credentialSubject.course" checked /><span>课程名称</span></label>
                 <label><input type="checkbox" value="credentialSubject.completionDate" checked /><span>完成日期</span></label>
-                <label><input type="checkbox" value="credentialSubject.achievement" /><span>完成状态</span></label>
               </fieldset>
               <button class="button primary" id="generate-disclosure" type="button">生成披露证明</button>
               <div class="privacy-summary" id="disclosure-privacy-summary">请选择凭证和需要公开的字段。</div>

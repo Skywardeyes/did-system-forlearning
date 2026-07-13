@@ -22,4 +22,27 @@ test('returns typed database and kms configuration', () => {
   assert.equal(config.database.port, 3306);
   assert.equal(config.database.ssl, false);
   assert.equal(config.kms.masterKey.length, 32);
+  assert.equal(config.auth.enabled, false);
+  assert.equal(config.auth.localDevLogin, false);
+  assert.equal(config.application.dataMode, 'dual');
+});
+
+test('local development login is explicit and requires a JWT secret', () => {
+  assert.throws(() => loadRuntimeConfig(validEnv({ AUTH_LOCAL_DEV_LOGIN: 'true' })), /requires AUTH/);
+  const config = loadRuntimeConfig(validEnv({ AUTH_LOCAL_DEV_LOGIN: 'true', AUTH_JWT_HS256_SECRET: Buffer.alloc(32, 8).toString('base64') }));
+  assert.equal(config.auth.localDevLogin, true);
+});
+
+test('validates V1, dual and V2 data modes with a V2 authentication guard', () => {
+  assert.equal(loadRuntimeConfig(validEnv({ APP_DATA_MODE: 'v1' })).application.dataMode, 'v1');
+  assert.throws(() => loadRuntimeConfig(validEnv({ APP_DATA_MODE: 'v2' })), /requires AUTH/);
+  assert.equal(loadRuntimeConfig(validEnv({ APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: Buffer.alloc(32, 8).toString('base64') })).application.dataMode, 'v2');
+  assert.throws(() => loadRuntimeConfig(validEnv({ APP_DATA_MODE: 'unknown' })), /v1, dual or v2/);
+});
+
+test('accepts an optional production JWT authentication secret with safe length validation', () => {
+  const config = loadRuntimeConfig(validEnv({ AUTH_JWT_HS256_SECRET: Buffer.alloc(32, 8).toString('base64') }));
+  assert.equal(config.auth.enabled, true);
+  assert.equal(config.auth.jwtHs256Secret.length, 32);
+  assert.throws(() => loadRuntimeConfig(validEnv({ AUTH_JWT_HS256_SECRET: Buffer.alloc(31, 8).toString('base64') })), /at least 32 bytes/);
 });

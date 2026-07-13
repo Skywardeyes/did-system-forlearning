@@ -33,6 +33,7 @@ main { min-width: 0; }
 .eyebrow, .section-heading p { margin: 0 0 5px; color: var(--cyan); font-size: 10px; font-weight: 800; letter-spacing: 1.4px; }
 h1, h2 { margin: 0; } h1 { font-family: Georgia, "Songti SC", serif; font-size: 28px; font-weight: 600; } h2 { font-size: 17px; }
 .top-status { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }.top-status span { border: 1px solid var(--line); padding: 5px 8px; color: var(--muted); font-size: 10px; }
+.top-status #session-status.authenticated { color: #12663e; border-color: #8bc8a7; background: #e8f7ef; }
 .view { display: none; padding: 28px clamp(24px, 4vw, 58px) 50px; }.view.active { display: block; }
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 18px; }
 .stat { min-height: 132px; padding: 20px; background: var(--panel); border-top: 3px solid var(--ink); box-shadow: var(--shadow); }.stat:nth-child(2) { border-color: var(--cyan); }.stat:nth-child(3) { border-color: var(--green); }.stat:nth-child(4) { border-color: var(--yellow); }

@@ -2,6 +2,7 @@ import { completeDidCreation, renderDidCard } from './did-ui.js';
 import { applyListAction, createListState, renderPagination } from './list-ui.js';
 import { applyLogFilter, createLogFilters, renderLogRow } from './log-ui.js';
 import { credentialRows, verificationRows } from './credential-ledger-ui.js';
+import { createSessionApi } from './session-api.js';
 
 const state = { dids: [], credentials: [], verificationLogs: [], disclosureVerificationLogs: [], structuredLogs: [], selectedCredential: null };
 const listStates = { did: createListState(), vc: createListState(), log: createListState(), disclosureLog: createListState() };
@@ -9,6 +10,7 @@ const listMeta = { did: {}, vc: {}, log: {}, disclosureLog: {} };
 const structuredLogFilters = createLogFilters();
 const structuredLogMeta = {};
 const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证', disclosure: '选择性披露', logs: '日志中心' };
+const sessionApi = createSessionApi();
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -16,10 +18,19 @@ const short = (value, length = 16) => value ? `${value.slice(0, length)}…${val
 const formatDate = (value) => value ? new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value)) : '-';
 
 async function api(path, options = {}) {
-  const response = await fetch(path, { headers: { 'Content-Type': 'application/json' }, ...options });
-  const body = await response.json();
-  if (!response.ok) throw new Error(body.error || '请求失败');
-  return body;
+  return sessionApi.api(path, options);
+}
+
+function renderSession() {
+  const session = sessionApi.getSession();
+  const badge = $('#session-status');
+  if (session.mode === 'v2') {
+    badge.textContent = `V2 · ${session.tenant?.name || '当前组织'} · ${session.roles.join('/')}`;
+    badge.classList.add('authenticated');
+  } else {
+    badge.textContent = 'V1 · 教学兼容模式';
+    badge.classList.remove('authenticated');
+  }
 }
 
 function toast(message, error = false) {
@@ -391,7 +402,7 @@ $('#copy-vc').addEventListener('click', async () => {
 });
 
 $('#reset-demo').addEventListener('click', async () => {
-  if (!confirm('这会清空现有本地演示数据，确认继续？')) return;
+  if (!confirm('这会生成一组新的本地演示数据，确认继续？')) return;
   try { const demo = await api('/api/demo/reset', { method: 'POST' }); $('#vc-preview').textContent = JSON.stringify(demo.credential.credential, null, 2); $('#verify-input').value = JSON.stringify(demo.credential.credential, null, 2); await refresh(); toast('演示数据已准备完成'); }
   catch (error) { toast(error.message, true); }
 });
@@ -402,4 +413,6 @@ const nextYear = new Date(now.getTime() + 365 * 86400000);
 $('[name="validUntil"]').value = nextYear.toISOString().slice(0, 16);
 setInterval(() => { $('#clock').textContent = new Date().toLocaleTimeString('zh-CN', { hour12: false }); }, 1000);
 
-refresh().catch((error) => toast(`无法连接本地服务：${error.message}`, true));
+sessionApi.initialize()
+  .then(() => { renderSession(); return refresh(); })
+  .catch((error) => toast(`无法连接本地服务：${error.message}`, true));

@@ -4,22 +4,70 @@ import { createEnvelopeCrypto } from './envelope-crypto.js';
 import { MySqlLogStore, MySqlStore } from './mysql-store.js';
 import { assertSupportedSchema } from './mysql-schema.js';
 import { LocalKms } from './local-kms.js';
+import { TransactionalLocalKms } from './kms/transactional-local-kms.js';
 import { LogService } from './log-service.js';
 import { VcService } from './vc-service.js';
 import { createAppServer } from './server.js';
+import { MySqlUnitOfWork } from './repositories/unit-of-work.js';
+import { DidRepository } from './repositories/did-repository.js';
+import { DidKeyVersionRepository } from './repositories/did-key-version-repository.js';
+import { CredentialRepository } from './repositories/credential-repository.js';
+import { CredentialStatusEventRepository } from './repositories/credential-status-event-repository.js';
+import { CredentialDisclosureMaterialRepository } from './repositories/credential-disclosure-material-repository.js';
+import { VerificationLogRepository } from './repositories/verification-log-repository.js';
+import { MembershipRepository } from './repositories/organization-repository.js';
+import { V2DidService } from './services/v2-did-service.js';
+import { V2CredentialService } from './services/v2-credential-service.js';
+import { V2DisclosureService } from './services/v2-disclosure-service.js';
+import { V2AccessService } from './services/v2-access-service.js';
+import { V2VerificationService } from './services/v2-verification-service.js';
+import { LocalSessionService } from './services/local-session-service.js';
+import { Hs256RequestAuthenticator } from './auth/request-authenticator.js';
+import { V2Api } from './v2-api.js';
+import { DualAuditLogStore, V2AuditLogStore } from './repositories/v2-audit-log-store.js';
 
 export async function bootstrap(env = process.env, { createPool = mysql.createPool } = {}) {
   const config = loadRuntimeConfig(env);
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool);
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 4 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
-    const store = new MySqlStore(pool, { envelopeCrypto });
-    const kms = new LocalKms(store, envelopeCrypto);
-    const logService = new LogService(new MySqlLogStore(pool));
-    const service = new VcService(store, undefined, { kms });
-    return { server: createAppServer(service, { logService }), pool };
+    const legacyEnabled = config.application.dataMode !== 'v2';
+    const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
+    const legacyLogStore = new MySqlLogStore(pool);
+    const v2LogStore = new V2AuditLogStore(pool, { envelopeCrypto });
+    const selectedLogStore = config.application.dataMode === 'v1' ? legacyLogStore
+      : config.application.dataMode === 'dual' ? new DualAuditLogStore(v2LogStore, legacyLogStore) : v2LogStore;
+    const logService = new LogService(selectedLogStore);
+    const service = legacyEnabled ? new VcService(legacyStore, undefined, { kms: new LocalKms(legacyStore, envelopeCrypto) }) : null;
+    let v2Api = null;
+    if (config.auth.enabled && config.application.dataMode !== 'v1') {
+      const unitOfWork = new MySqlUnitOfWork(pool);
+      const didRepository = new DidRepository({ envelopeCrypto });
+      const didKeyVersionRepository = new DidKeyVersionRepository();
+      const credentialRepository = new CredentialRepository({ envelopeCrypto });
+      const credentialStatusEventRepository = new CredentialStatusEventRepository();
+      const disclosureMaterialRepository = new CredentialDisclosureMaterialRepository({ envelopeCrypto });
+      const verificationLogRepository = new VerificationLogRepository({ envelopeCrypto });
+      const transactionalKms = new TransactionalLocalKms(envelopeCrypto);
+      const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, kms: transactionalKms });
+      const credentialService = new V2CredentialService({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository,
+        credentialStatusEventRepository, disclosureMaterialRepository, kms: transactionalKms });
+      const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
+      const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
+        credentialRepository, verificationLogRepository });
+      const accessService = new V2AccessService({ unitOfWork, membershipRepository: new MembershipRepository() });
+      const authenticator = new Hs256RequestAuthenticator({ secret: config.auth.jwtHs256Secret });
+      const localSessionService = new LocalSessionService({
+        pool, secret: config.auth.jwtHs256Secret, enabled: config.auth.localDevLogin,
+        organizationName: env.BOOTSTRAP_ORG_NAME || '本地演示组织',
+        externalSubject: env.BOOTSTRAP_ADMIN_SUBJECT || 'local-admin',
+      });
+      v2Api = new V2Api({ authenticator, accessService, didService, credentialService, disclosureService,
+        verificationService, localSessionService, logService });
+    }
+    return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled }), pool, dataMode: config.application.dataMode };
   } catch {
     await pool.end?.().catch(() => {});
     const error = new Error('Unable to initialize the configured MySQL database');

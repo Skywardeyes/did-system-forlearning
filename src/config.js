@@ -21,10 +21,22 @@ export function loadRuntimeConfig(env = process.env) {
   if (masterKey.length !== 32 || masterKey.toString('base64').replace(/=+$/, '') !== encodedKey.replace(/=+$/, '')) {
     throw new ConfigurationError('KMS_MASTER_KEY must be valid Base64 encoding exactly 32 bytes');
   }
+  const authSecretText = String(env.AUTH_JWT_HS256_SECRET || '').trim();
+  const authSecret = authSecretText ? Buffer.from(authSecretText, 'base64') : null;
+  if (authSecretText && (authSecret.length < 32 || authSecret.toString('base64').replace(/=+$/, '') !== authSecretText.replace(/=+$/, ''))) {
+    throw new ConfigurationError('AUTH_JWT_HS256_SECRET must be valid Base64 encoding at least 32 bytes');
+  }
+  const dataMode = String(env.APP_DATA_MODE || 'dual').trim().toLowerCase();
+  if (!['v1', 'dual', 'v2'].includes(dataMode)) throw new ConfigurationError('APP_DATA_MODE must be v1, dual or v2');
+  if (dataMode === 'v2' && !authSecret) throw new ConfigurationError('APP_DATA_MODE=v2 requires AUTH_JWT_HS256_SECRET');
+  const localDevLogin = String(env.AUTH_LOCAL_DEV_LOGIN || 'false').trim().toLowerCase() === 'true';
+  if (localDevLogin && !authSecret) throw new ConfigurationError('AUTH_LOCAL_DEV_LOGIN=true requires AUTH_JWT_HS256_SECRET');
   return {
     database: {
       host, port, database, user, password, ssl: env.DB_SSL === 'true',
     },
     kms: { masterKey, activeKeyId: env.KMS_MASTER_KEY_ID || 'local-master-v1' },
+    auth: { enabled: Boolean(authSecret), jwtHs256Secret: authSecret, localDevLogin },
+    application: { dataMode },
   };
 }

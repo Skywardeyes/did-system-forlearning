@@ -1,0 +1,85 @@
+import assert from 'node:assert/strict';
+import test from 'node:test';
+import { V2CredentialService } from '../../src/services/v2-credential-service.js';
+
+const context = { tenantId: 'tenant-1', actorId: 'operator-1', requestId: 'request-1' };
+const now = new Date();
+const inOneDay = new Date(now.getTime() + 86_400_000).toISOString();
+
+class UnitOfWork { async run(contextValue, callback) { return callback({ context: contextValue, connection: {} }); } }
+class DidRepository {
+  constructor(records) { this.records = new Map(records.map((record) => [record.id, structuredClone(record)])); }
+  async findByDid(_operation, did) { return [...this.records.values()].find((record) => record.did === did) || null; }
+  async getForUpdate(_operation, id) { return structuredClone(this.records.get(id) || null); }
+}
+class KeyRepository {
+  async findByDidVersion(_operation, didId, version) {
+    return didId === 'issuer-id' && version === 1
+      ? { didId, version, kmsKeyId: 'kms-issuer-1', status: 'active', verificationMethod: 'did:example:issuer#key-1' }
+      : null;
+  }
+}
+class CredentialRepository {
+  constructor() { this.records = new Map(); }
+  async create(_operation, record) { const saved = { ...structuredClone(record), rowVersion: 1 }; this.records.set(saved.id, saved); return saved; }
+  async getForUpdate(_operation, id) { return structuredClone(this.records.get(id) || null); }
+  async saveLifecycle(_operation, record, expectedRowVersion) {
+    const current = this.records.get(record.id); assert.equal(current.rowVersion, expectedRowVersion);
+    const saved = { ...structuredClone(record), rowVersion: expectedRowVersion + 1 }; this.records.set(record.id, saved); return saved;
+  }
+  async list() { return { total: this.records.size, items: [...this.records.values()].map(structuredClone) }; }
+}
+class EventRepository { constructor() { this.events = []; } async append(_operation, event) { this.events.push(structuredClone(event)); return event; } }
+class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payload }) { this.calls.push({ keyId, payload: structuredClone(payload) }); return 'signature-from-kms'; } }
+
+function createService() {
+  const dids = [
+    { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1 },
+    { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1 },
+  ];
+  const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms();
+  return {
+    service: new V2CredentialService({ unitOfWork: new UnitOfWork(), didRepository: new DidRepository(dids),
+      didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, kms }),
+    credentialRepository, events, kms,
+  };
+}
+
+function issueInput() {
+  return { issuerDid: 'did:example:issuer', holderDid: 'did:example:holder', subjectName: '张同学', course: 'DID 与 VC', completionDate: '2026-07-13', validUntil: inOneDay };
+}
+
+test('V2 credential issuance signs through KMS and creates an append-only status event', async () => {
+  const { service, credentialRepository, events, kms } = createService();
+  const issued = await service.issueCredential(context, issueInput());
+  assert.match(issued.id, /^urn:uuid:/);
+  assert.equal(issued.status, 'active');
+  assert.equal(issued.credential.proof.proofValue, 'signature-from-kms');
+  assert.equal(kms.calls[0].keyId, 'kms-issuer-1');
+  assert.equal('proof' in kms.calls[0].payload, false);
+  assert.equal(credentialRepository.records.get(issued.id).rowVersion, 1);
+  assert.deepEqual(events.events.map((event) => [event.fromStatus, event.toStatus]), [[null, 'active']]);
+});
+
+test('V2 credential lifecycle uses valid transitions and optimistic versions', async () => {
+  const { service, events } = createService();
+  const issued = await service.issueCredential(context, issueInput());
+  const suspended = await service.suspendCredential(context, issued.id, { expectedRowVersion: 1, reason: 'review' });
+  assert.equal(suspended.status, 'suspended');
+  const resumed = await service.resumeCredential(context, issued.id, { expectedRowVersion: 2 });
+  assert.equal(resumed.status, 'active');
+  const revoked = await service.revokeCredential(context, issued.id, { expectedRowVersion: 3 });
+  assert.equal(revoked.status, 'revoked');
+  await assert.rejects(() => service.resumeCredential(context, issued.id, { expectedRowVersion: 4 }), /cannot transition/);
+  assert.deepEqual(events.events.map((event) => event.toStatus), ['active', 'suspended', 'active', 'revoked']);
+});
+
+test('V2 replacement links old and new credentials within one unit of work', async () => {
+  const { service } = createService();
+  const issued = await service.issueCredential(context, issueInput());
+  const result = await service.replaceCredential(context, issued.id, { ...issueInput(), expectedRowVersion: 1, course: 'DID 与 VC（补发）' });
+  assert.equal(result.replaced.status, 'replaced');
+  assert.equal(result.replacement.status, 'active');
+  assert.equal(result.replaced.replacedByCredentialId, result.replacement.id);
+  assert.equal(result.replacement.replacesCredentialId, issued.id);
+});

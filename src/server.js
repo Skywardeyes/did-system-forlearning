@@ -23,12 +23,12 @@ const securityHeaders = {
   'X-Content-Type-Options': 'nosniff',
 };
 
-function sendJson(response, status, body) {
+export function sendJson(response, status, body) {
   response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8' });
   response.end(JSON.stringify(body));
 }
 
-async function readJson(request) {
+export async function readJson(request) {
   const mediaType = String(request.headers['content-type'] || '').split(';', 1)[0].trim().toLowerCase();
   if (mediaType !== 'application/json') {
     const error = new Error('请求 Content-Type 必须是 application/json');
@@ -170,20 +170,27 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export function createAppServer(activeService, { logService = noOpLogService } = {}) { return createServer(async (request, response) => {
+export function createAppServer(activeService, { logService = noOpLogService, v2Api = null, legacyApiEnabled = true } = {}) { return createServer(async (request, response) => {
   const correlationId = randomUUID();
-  const requestService = activeService.withAuditContext
+  const requestService = activeService?.withAuditContext
     ? activeService.withAuditContext(logService, correlationId)
     : activeService;
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   try {
-    if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, requestService, logService, correlationId);
+    if (v2Api && url.pathname.startsWith('/api/v2/')) {
+      const result = await v2Api.handle(request, url, correlationId, readJson);
+      sendJson(response, result.status, result.body);
+    } else if (url.pathname.startsWith('/api/') && !legacyApiEnabled) {
+      sendJson(response, 410, { error: 'Legacy API is disabled in V2 data mode', code: 'LEGACY_API_DISABLED' });
+    } else if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, requestService, logService, correlationId);
     else await serveStatic(response, url.pathname);
   } catch (error) {
     const conflict = /\u7248\u672c\u51b2\u7a81/.test(error.message);
     const notFound = /\u672a\u627e\u5230/.test(error.message);
     const code = error.code || (conflict ? 'VERSION_CONFLICT' : notFound ? 'NOT_FOUND' : 'INVALID_REQUEST');
     const level = ['REQUEST_INVALID_JSON', 'REQUEST_TOO_LARGE', 'NOT_FOUND'].includes(code) ? 'warn' : 'error';
+    if (code === 'AUTHENTICATION_REQUIRED') return sendJson(response, 401, { error: 'Authentication is required', code });
+    if (code === 'AUTHORIZATION_DENIED') return sendJson(response, 403, { error: 'Authorization is denied', code });
     await logService[level]({ type: 'system', module: code.startsWith('STORE_') ? 'STORE' : 'API', action: code, success: false, correlationId, errorCode: code, message: error.message || '请求处理失败', context: { method: request.method, pathname: url.pathname } });
     sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : code === 'UNSUPPORTED_MEDIA_TYPE' ? 415 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
   }
