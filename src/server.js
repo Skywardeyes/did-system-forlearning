@@ -188,4 +188,3 @@ export function createAppServer(activeService, { logService = noOpLogService } =
     sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : code === 'UNSUPPORTED_MEDIA_TYPE' ? 415 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
   }
 }); }
-
