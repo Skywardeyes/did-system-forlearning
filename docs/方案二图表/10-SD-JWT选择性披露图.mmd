@@ -1,0 +1,27 @@
+flowchart TB
+  VC[完整 VC]
+  subgraph EDU["教学版摘要证明"]
+    direction LR
+    E1[每个字段：随机盐] --> E2[SHA-256 路径 + 盐 + 值]
+    E2 --> E3[Issuer 签名摘要清单]
+  end
+  subgraph SD["RFC 9901 核心 SD-JWT"]
+    direction LR
+    S1[Disclosure：盐 + 字段名 + 值] --> S2[SHA-256 Disclosure]
+    S2 --> S3[Issuer-signed JWT：_sd 摘要]
+  end
+  subgraph PRESENT["Holder 按需展示"]
+    direction LR
+    P1[教学版：选中值与盐] --> V1[重算字段摘要]
+    P2[SD-JWT：选中 Disclosure] --> V2[重算 Disclosure 摘要]
+  end
+  subgraph VERIFY["Verifier 验证"]
+    direction LR
+    V1 --> R[检查 Issuer / 签名 / 时间 / 状态]
+    V2 --> R
+    R --> L[披露验证台账：记录格式]
+  end
+  VC --> E1
+  VC --> S1
+  E3 --> P1
+  S3 --> P2

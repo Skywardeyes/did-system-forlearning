@@ -28,3 +28,21 @@ sequenceDiagram
     VC->>LG: 写入 VC_VERIFY（凭证验证）审计日志
     VC-->>API: valid（总体结论）+ checks（分项结果）+ failedChecks（失败项）
     API-->>UI: 200 OK（请求成功）+ 验证报告
+    rect rgb(239, 246, 255)
+      U->>UI: 选择 SD-JWT（选择性披露 JWT）和公开字段
+      UI->>API: POST /api/credentials/{id}/sd-jwt（生成 SD-JWT）
+      API->>VC: createSdJwtPresentation(id, paths)（生成紧凑展示串）
+      VC->>ST: 读取内部 SD-JWT 材料
+      VC-->>API: issuerJwt~Disclosure~（紧凑串）
+      API-->>UI: 200 OK（请求成功）+ SD-JWT
+      U->>UI: 提交 SD-JWT 验证
+      UI->>API: POST /api/sd-jwt/verify（验证紧凑串）
+      API->>VC: verifySdJwtPresentation(sdJwt)（验证 SD-JWT）
+      VC->>ST: 解析 Issuer、密钥版本与凭证状态
+      VC->>CR: 验证 EdDSA JWS 与 Disclosure 摘要
+      CR-->>VC: 签名与摘要结果
+      VC->>ST: 保存披露验证台账
+      VC->>LG: 写入 VC_SD_JWT_VERIFY（SD-JWT 验证）审计日志
+      VC-->>API: valid（总体结论）+ checks（分项结果）
+      API-->>UI: 200 OK（请求成功）+ 验证报告
+    end

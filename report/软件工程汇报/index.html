@@ -119,7 +119,7 @@ flowchart LR
           <tr><td>FR-04</td><td>VC 验证</td><td>独立返回格式、Issuer、DID、密钥、签名、时间和状态七项结果。</td><td>正常与篡改测试</td></tr>
           <tr><td>FR-05</td><td>VC 生命周期</td><td>支持暂停、恢复、替换、过期和撤销。</td><td>状态机回归测试</td></tr>
           <tr><td>FR-06</td><td>台账与日志</td><td>提供凭证台账、验证记录、结构化日志、搜索和分页。</td><td>UI + API 测试</td></tr>
-          <tr><td>FR-07</td><td>选择性披露</td><td>只提交选中声明，以加盐 SHA-256 摘要和 Issuer 签名验证来源与完整性，并保存披露验证台账。</td><td>正常、篡改、状态与隐私测试</td></tr>
+          <tr><td>FR-07</td><td>选择性披露</td><td>支持教学版摘要证明与 RFC 9901 核心 SD-JWT；均可只提交选中声明并保存披露验证台账。</td><td>正常、篡改、状态与隐私测试</td></tr>
         </tbody></table></div>
       </div>
 
@@ -148,7 +148,7 @@ flowchart TB
   subgraph D[领域层]
     S[VcService]
     M[DidMethodRegistry]
-    C[Ed25519 / Stable JSON / Base58 / SHA-256]
+    C[Ed25519 / JWS / Stable JSON / Base58 / SHA-256]
     L[LogService / 脱敏]
   end
   subgraph T[持久化层]
@@ -171,8 +171,8 @@ flowchart TB
         <div class="table-wrap"><table><thead><tr><th>层次</th><th>主要文件</th><th>职责</th><th>为什么拆分</th></tr></thead><tbody>
           <tr><td>表现层</td><td><code>public/index.html</code><br><code>public/*.js</code></td><td>导航、表单、凭证台账、验证记录和日志界面。</td><td>让 UI 逻辑不侵入领域规则。</td></tr>
           <tr><td>接口层</td><td><code>src/server.js</code></td><td>静态资源、API 路由、请求限制和错误映射。</td><td>统一 HTTP 协议边界。</td></tr>
-          <tr><td>领域层</td><td><code>src/vc-service.js</code></td><td>DID/VC 规则、状态机、完整验证与选择性披露验证。</td><td>核心行为可直接集成测试。</td></tr>
-          <tr><td>密码学</td><td><code>src/crypto.js</code></td><td>稳定序列化、Base58、Ed25519、加盐声明摘要。</td><td>隔离密码学细节和业务含义。</td></tr>
+          <tr><td>领域层</td><td><code>src/vc-service.js</code></td><td>DID/VC 规则、状态机、完整验证、教学版披露与 SD-JWT 验证。</td><td>核心行为可直接集成测试。</td></tr>
+          <tr><td>密码学</td><td><code>src/crypto.js</code></td><td>稳定序列化、Base58、Ed25519、JWS、加盐摘要与 Disclosure 摘要。</td><td>隔离密码学细节和业务含义。</td></tr>
           <tr><td>数据层</td><td><code>src/store.js</code><br><code>src/log-store.js</code></td><td>串行更新、原子写入和独立日志存储。</td><td>降低丢失更新和半写文件风险。</td></tr>
         </tbody></table></div>
       </div>
@@ -188,7 +188,7 @@ flowchart LR
   KEY["&lt;b&gt;KEY_HISTORY｜历史密钥&lt;/b&gt;&lt;br/&gt;didId：所属 DID（FK）&lt;br/&gt;version：密钥版本&lt;br/&gt;publicJwk：历史公钥&lt;br/&gt;retiredAt：停用时间"]
   VC["&lt;b&gt;CREDENTIAL_RECORD｜凭证记录&lt;/b&gt;&lt;br/&gt;id：凭证编号（PK）&lt;br/&gt;issuerDid：签发方（FK）&lt;br/&gt;holderDid：持有方（FK）&lt;br/&gt;status：生命周期状态&lt;br/&gt;credential：完整凭证&lt;br/&gt;replaces / replacedBy：替换关系"]
   VERIFY["&lt;b&gt;VERIFICATION_LOG｜完整验证记录&lt;/b&gt;&lt;br/&gt;credentialId：被验证凭证（FK）&lt;br/&gt;valid：总体结果&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
-  DISCLOSE["&lt;b&gt;DISCLOSURE_LOG｜披露验证记录&lt;/b&gt;&lt;br/&gt;credentialId：凭证编号（FK）&lt;br/&gt;disclosedPaths：公开字段&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
+  DISCLOSE["&lt;b&gt;DISCLOSURE_LOG｜披露验证记录&lt;/b&gt;&lt;br/&gt;credentialId：凭证编号（FK）&lt;br/&gt;format：教学版 / SD-JWT&lt;br/&gt;disclosedPaths：公开字段&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
   LOG["&lt;b&gt;STRUCTURED_LOG｜结构化日志&lt;/b&gt;&lt;br/&gt;correlationId：请求关联号&lt;br/&gt;type / level：类型与级别&lt;br/&gt;module / action：模块与动作&lt;br/&gt;success：执行结果"]
   DID -->|"1 对多：保留轮换历史"| KEY
   DID -->|"1 对多：作为签发方"| VC
@@ -239,30 +239,40 @@ stateDiagram-v2
         </div>
       </div>
 
-      <div class="subsection diagram"><div class="diagram-title"><h3>教学版选择性披露</h3><span>不提交完整 VC，只公开本次需要验证的声明</span></div><pre class="mermaid">
+      <div class="subsection diagram"><div class="diagram-title"><h3>双路线选择性披露</h3><span>两种方式均不提交完整 VC，只公开本次需要验证的声明</span></div><pre class="mermaid">
 flowchart TB
-  subgraph ISSUE["① 签发时准备"]
+  VC[完整 VC]
+  subgraph EDU["① 教学版摘要证明"]
     direction LR
-    VC[完整 VC] --> S[声明生成 16 字节随机盐]
+    S[声明生成 16 字节随机盐]
     S --> H[SHA-256 路径 + 盐 + 值]
     H --> M[Issuer 签名摘要清单]
   end
-  subgraph PRESENT["② Holder 生成证明"]
+  subgraph SD["② RFC 9901 核心 SD-JWT"]
     direction LR
-    D[选择公开字段] --> P[提交选中值与盐]
-    P --> X[隐藏字段只保留摘要]
+    D1[Disclosure：盐 + 字段名 + 值]
+    D1 --> H1[SHA-256 Disclosure]
+    H1 --> J[Issuer 签名 JWT：_sd 摘要]
   end
-  subgraph VERIFY["③ Verifier 验证与留痕"]
+  subgraph PRESENT["③ Holder 按需展示"]
     direction LR
-    V[重算公开字段摘要] --> R[检查 Issuer / 签名 / 时间 / 状态]
-    R --> L[写入披露证明验证台账]
+    P1[教学版：选中值与盐] --> V1[重算字段摘要]
+    P2[SD-JWT：选中 Disclosure] --> V2[重算 Disclosure 摘要]
   end
-  M --> D
-  X --> V
+  subgraph VERIFY["④ Verifier 验证与留痕"]
+    direction LR
+    V1 --> R[检查 Issuer / 签名 / 时间 / 状态]
+    V2 --> R
+    R --> L[写入披露验证台账：记录 format]
+  end
+  VC --> S
+  VC --> D1
+  M --> P1
+  J --> P2
       </pre></div>
       <div class="callout"><strong>隐私与边界：</strong>系统保留教学版摘要证明，并新增 RFC 9901 核心 SD-JWT：Issuer-signed JWT 保存 <code>_sd</code> 摘要，Holder 仅携带本次所需的 Disclosure。普通 API 不返回完整披露材料。教学版方案不是 BBS+ 或零知识证明；SD-JWT 当前未实现 Holder key binding、钱包本地生成或正式 SD-JWT VC 应用配置。</div>
 
-      <div class="subsection diagram"><div class="diagram-title"><h3>VC 签发与验证时序图</h3><span>从页面操作到签名、存储、验证和日志</span></div>
+      <div class="subsection diagram"><div class="diagram-title"><h3>VC 与 SD-JWT 时序图</h3><span>从签发到完整验证、选择性披露验证和日志</span></div>
         <pre class="mermaid">
 sequenceDiagram
   actor U as User（用户）
@@ -281,7 +291,8 @@ sequenceDiagram
   C-->>V: proofValue（数字签名值）
   V->>S: 原子保存 CredentialRecord（凭证记录）
   V->>L: 记录 VC_ISSUE（凭证签发）
-  V-->>UI: 返回完整 VC（可验证凭证）
+  V-->>API: 返回完整 VC（可验证凭证）
+  API-->>UI: 201 Created（创建成功）+ VC JSON
   U->>UI: 执行验证
   UI->>API: POST /api/verify（请求验证凭证）
   API->>V: verifyCredential(credential)（验证凭证）
@@ -291,7 +302,26 @@ sequenceDiagram
   V->>V: 汇总七项检查
   V->>S: 保存 verificationLog（验证记录）
   V->>L: 记录 VC_VERIFY（凭证验证）
-  V-->>UI: valid（结论）+ checks（分项）+ failedChecks（失败项）
+  V-->>API: valid（结论）+ checks（分项）+ failedChecks（失败项）
+  API-->>UI: 200 OK（请求成功）+ 验证报告
+  rect rgb(239, 246, 255)
+    U->>UI: 选择 SD-JWT 与公开字段
+    UI->>API: POST /api/credentials/{id}/sd-jwt（生成 SD-JWT）
+    API->>V: createSdJwtPresentation(id, paths)（选择披露项）
+    V->>S: 读取内部 SD-JWT 材料
+    V-->>API: issuerJwt~Disclosure~（紧凑串）
+    API-->>UI: 返回 SD-JWT 展示内容
+    U->>UI: 提交 SD-JWT 验证
+    UI->>API: POST /api/sd-jwt/verify（验证紧凑串）
+    API->>V: verifySdJwtPresentation(sdJwt)（验证 SD-JWT）
+    V->>S: 解析 Issuer、密钥版本与 VC 状态
+    V->>C: 验证 EdDSA JWS 与 Disclosure 摘要
+    C-->>V: 签名与摘要结果
+    V->>S: 保存披露验证台账
+    V->>L: 记录 VC_SD_JWT_VERIFY（SD-JWT 验证）
+    V-->>API: valid（结论）+ checks（分项）
+    API-->>UI: 200 OK（请求成功）+ 验证报告
+  end
         </pre>
       </div>
     </section>
