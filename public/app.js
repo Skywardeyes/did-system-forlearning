@@ -88,8 +88,8 @@ function renderDisclosureLogs() {
 function renderDisclosureSelect() {
   const select = $('#disclosure-credential');
   const previous = select.value;
-  const records = state.credentials.filter((item) => item.selectiveDisclosureAvailable);
-  select.innerHTML = `<option value="">请选择支持选择性披露的凭证</option>${records.map((record) => `<option value="${escapeHtml(record.id)}">${escapeHtml(record.credential.credentialSubject.name)} · ${escapeHtml(record.credential.credentialSubject.course)} · ${escapeHtml(record.status)}</option>`).join('')}`;
+  const records = state.credentials.filter((item) => item.selectiveDisclosureAvailable && item.status === 'active');
+  select.innerHTML = `<option value="">请选择状态为 active 且支持选择性披露的凭证</option>${records.map((record) => `<option value="${escapeHtml(record.id)}">${escapeHtml(record.credential.credentialSubject.name)} · ${escapeHtml(record.credential.credentialSubject.course)} · ${escapeHtml(record.status)}</option>`).join('')}`;
   if (records.some((item) => item.id === previous)) select.value = previous;
   else if (records[0]) select.value = records[0].id;
 }

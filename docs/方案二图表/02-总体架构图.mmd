@@ -13,7 +13,7 @@ flowchart TB
     subgraph Domain["业务与领域层"]
         Service["VcService"]
         Registry["DidMethodRegistry"]
-        Crypto["Ed25519 / Stable JSON / Base58"]
+        Crypto["Ed25519 / JWS / Stable JSON / Base58 / SHA-256"]
         Query["搜索、排序、分页"]
         Logs["LogService / 递归脱敏"]
     end
@@ -36,4 +36,3 @@ flowchart TB
     Store --> Business
     LogStore --> Audit
     Static --> FE
-

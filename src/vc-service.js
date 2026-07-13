@@ -34,6 +34,19 @@ const SD_JWT_CLAIMS = Object.freeze({
   'credentialSubject.achievement': 'achievement',
 });
 const SD_JWT_PATHS = Object.freeze(Object.fromEntries(Object.entries(SD_JWT_CLAIMS).map(([path, claim]) => [claim, path])));
+
+function effectiveCredentialStatus(record, now = Date.now()) {
+  if (!record) return null;
+  return Date.parse(record.credential.validUntil) < now && !['replaced', 'revoked'].includes(record.status)
+    ? 'expired'
+    : record.status;
+}
+
+function assertCredentialCanCreateDisclosure(record) {
+  const status = effectiveCredentialStatus(record);
+  if (status !== 'active') throw new Error(`凭证当前状态为 ${status || 'missing'}，不能生成选择性披露`);
+}
+
 const AUDIT_ACTIONS = {
   createDid: ['DID_CREATE', 'DID'],
   updateDid: ['DID_UPDATE', 'DID'],
@@ -373,6 +386,7 @@ export class VcService {
     const state = await this.store.load();
     const record = state.credentials.find((item) => item.id === id);
     if (!record) throw new Error('未找到指定凭证');
+    assertCredentialCanCreateDisclosure(record);
     if (!record.disclosureMaterial) throw new Error('该凭证不包含选择性披露材料，请重新签发');
     const { claims, manifest, proof } = record.disclosureMaterial;
     return {
@@ -393,6 +407,7 @@ export class VcService {
     if (selectedPaths.some((path) => !DISCLOSABLE_CLAIMS.includes(path))) throw new Error('包含不允许披露的字段');
     const state = await this.store.load();
     const record = state.credentials.find((item) => item.id === id);
+    assertCredentialCanCreateDisclosure(record);
     if (!record?.sdJwtMaterial) throw new Error('该凭证不包含 SD-JWT 材料，请重新签发');
     const disclosures = selectedPaths.map((path) => record.sdJwtMaterial.disclosures[path]?.disclosure);
     if (disclosures.some((item) => !item)) throw new Error('SD-JWT 披露字段不完整');
