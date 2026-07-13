@@ -110,6 +110,10 @@ async function handleApi(request, response, url, activeService, logService, corr
     const body = await readJson(request);
     return sendJson(response, 200, await activeService.verifyDisclosurePresentation(body.presentation));
   }
+  if (request.method === 'POST' && url.pathname === '/api/sd-jwt/verify') {
+    const body = await readJson(request);
+    return sendJson(response, 200, await activeService.verifySdJwtPresentation(body.sdJwt));
+  }
   if (request.method === 'POST' && url.pathname === '/api/demo/reset') {
     return sendJson(response, 200, await activeService.resetDemo());
   }
@@ -127,6 +131,11 @@ async function handleApi(request, response, url, activeService, logService, corr
   if (request.method === 'POST' && disclosureAction) {
     const body = await readJson(request);
     return sendJson(response, 200, await activeService.createDisclosurePresentation(decodeURIComponent(disclosureAction[1]), body.paths));
+  }
+  const sdJwtAction = url.pathname.match(/^\/api\/credentials\/(.+)\/sd-jwt$/);
+  if (request.method === 'POST' && sdJwtAction) {
+    const body = await readJson(request);
+    return sendJson(response, 200, { sdJwt: await activeService.createSdJwtPresentation(decodeURIComponent(sdJwtAction[1]), body.paths) });
   }
 
   const vcAction = url.pathname.match(/^\/api\/credentials\/(.+)\/(suspend|resume|replace|revoke)$/);

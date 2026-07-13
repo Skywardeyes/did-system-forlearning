@@ -130,13 +130,14 @@
         </section>
 
         <section class="view" id="view-disclosure">
-          <div class="section-heading"><div><p>SELECTIVE DISCLOSURE</p><h2>教学版选择性披露</h2></div></div>
-          <div class="note disclosure-note">持有人只提交选中的声明、随机盐、摘要清单和 Issuer 签名；未选择字段不会进入披露证明。本功能是教学实现，不是正式 SD-JWT VC 或 BBS+。</div>
+          <div class="section-heading"><div><p>SELECTIVE DISCLOSURE</p><h2>选择性披露</h2></div></div>
+          <div class="note disclosure-note">可对比教学版摘要证明与 RFC 9901 核心 SD-JWT：两者均按需提交字段；SD-JWT 使用 Issuer-signed JWT 与标准 Disclosure 紧凑串。本系统尚未实现 SD-JWT Holder key binding 或 BBS+。</div>
           <div class="verify-layout disclosure-layout">
             <section class="panel form-panel">
               <div class="section-heading"><div><p>CREATE PRESENTATION</p><h2>生成披露证明</h2></div></div>
-              <div class="disclosure-controls">
-              <label>选择凭证<select id="disclosure-credential" required></select></label>
+               <div class="disclosure-controls">
+               <label>证明方式<select id="disclosure-format"><option value="educational">教学版摘要证明</option><option value="sd-jwt">SD-JWT（RFC 9901 核心）</option></select></label>
+               <label>选择凭证<select id="disclosure-credential" required></select></label>
               <fieldset class="disclosure-fields"><legend>选择要公开的字段</legend>
                 <label><input type="checkbox" value="credentialSubject.name" /><span>学员姓名</span></label>
                 <label><input type="checkbox" value="credentialSubject.course" checked /><span>课程名称</span></label>

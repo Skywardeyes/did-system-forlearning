@@ -334,26 +334,31 @@ $('#tamper-name').addEventListener('click', () => {
 $('#generate-disclosure').addEventListener('click', async () => {
   const credentialId = $('#disclosure-credential').value;
   const paths = $$('.disclosure-fields input:checked').map((input) => input.value);
+  const format = $('#disclosure-format').value;
   if (!credentialId) return toast('请选择一张支持选择性披露的凭证', true);
   if (!paths.length) return toast('请至少选择一个公开字段', true);
   try {
-    const presentation = await api(`/api/credentials/${encodeURIComponent(credentialId)}/disclosures`, { method: 'POST', body: JSON.stringify({ paths }) });
+    const response = await api(`/api/credentials/${encodeURIComponent(credentialId)}/${format === 'sd-jwt' ? 'sd-jwt' : 'disclosures'}`, { method: 'POST', body: JSON.stringify({ paths }) });
+    const presentation = format === 'sd-jwt' ? { format: 'sd-jwt', sdJwt: response.sdJwt } : response;
     $('#disclosure-input').value = JSON.stringify(presentation, null, 2);
     const labels = { 'credentialSubject.name': '学员姓名', 'credentialSubject.course': '课程名称', 'credentialSubject.completionDate': '完成日期', 'credentialSubject.achievement': '完成状态' };
     const hidden = Object.entries(labels).filter(([path]) => !paths.includes(path)).map(([, label]) => label);
-    $('#disclosure-privacy-summary').textContent = `已公开：${paths.map((path) => labels[path]).join('、')}；未公开：${hidden.join('、') || '无'}。披露证明不包含完整 VC。`;
+    const formatLabel = format === 'sd-jwt' ? 'SD-JWT（不含 Holder key binding）' : '教学版摘要证明';
+    $('#disclosure-privacy-summary').textContent = `${formatLabel}：已公开：${paths.map((path) => labels[path]).join('、')}；未公开：${hidden.join('、') || '无'}。披露证明不包含完整 VC。`;
     $('#disclosure-result-badge').className = 'result-badge idle';
     $('#disclosure-result-badge').textContent = '等待验证';
     $('#disclosure-results').className = 'check-list empty-state';
     $('#disclosure-results').textContent = '披露证明已生成，请执行验证。';
-    toast('选择性披露证明已生成');
+    toast(`${formatLabel} 已生成`);
   } catch (error) { toast(error.message, true); }
 });
 
 $('#verify-disclosure').addEventListener('click', async () => {
   try {
     const presentation = JSON.parse($('#disclosure-input').value);
-    const result = await api('/api/disclosures/verify', { method: 'POST', body: JSON.stringify({ presentation }) });
+    const result = presentation.format === 'sd-jwt'
+      ? await api('/api/sd-jwt/verify', { method: 'POST', body: JSON.stringify({ sdJwt: presentation.sdJwt }) })
+      : await api('/api/disclosures/verify', { method: 'POST', body: JSON.stringify({ presentation }) });
     renderDisclosureVerification(result);
     await refresh();
     toast(result.valid ? '选择性披露验证通过' : '选择性披露验证失败', !result.valid);
@@ -363,6 +368,14 @@ $('#verify-disclosure').addEventListener('click', async () => {
 $('#tamper-disclosure').addEventListener('click', () => {
   try {
     const presentation = JSON.parse($('#disclosure-input').value);
+    if (presentation.format === 'sd-jwt') {
+      const position = presentation.sdJwt.lastIndexOf('~') - 1;
+      if (position < 0) return toast('SD-JWT 内容无效', true);
+      const original = presentation.sdJwt[position];
+      presentation.sdJwt = `${presentation.sdJwt.slice(0, position)}${original === 'A' ? 'B' : 'A'}${presentation.sdJwt.slice(position + 1)}`;
+      $('#disclosure-input').value = JSON.stringify(presentation, null, 2);
+      return toast('已篡改 SD-JWT 披露项，可再次验证观察摘要失败');
+    }
     const course = presentation.disclosedClaims?.find((item) => item.path === 'credentialSubject.course');
     if (!course) return toast('当前证明没有公开课程字段', true);
     course.value = `${course.value}（已修改）`;

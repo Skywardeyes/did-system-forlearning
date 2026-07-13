@@ -52,6 +52,6 @@ export function publicDid(identity) {
 }
 
 export function publicCredential(record) {
-  const { disclosureMaterial, ...safeRecord } = record;
-  return structuredClone({ ...safeRecord, selectiveDisclosureAvailable: Boolean(disclosureMaterial) });
+  const { disclosureMaterial, sdJwtMaterial, ...safeRecord } = record;
+  return structuredClone({ ...safeRecord, selectiveDisclosureAvailable: Boolean(disclosureMaterial), sdJwtAvailable: Boolean(sdJwtMaterial) });
 }

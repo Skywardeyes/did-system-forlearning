@@ -51,6 +51,35 @@ export function createClaimDigest(path, salt, value) {
     .digest('base64url');
 }
 
+export function base64UrlJson(value) {
+  return Buffer.from(JSON.stringify(value)).toString('base64url');
+}
+
+export function parseBase64UrlJson(value) {
+  return JSON.parse(Buffer.from(value, 'base64url').toString('utf8'));
+}
+
+export function createSdJwtDisclosure(claimName, value) {
+  const disclosure = base64UrlJson([createDisclosureSalt(), claimName, value]);
+  return { disclosure, digest: createHash('sha256').update(disclosure).digest('base64url') };
+}
+
+export function signCompactJwt(header, payload, privateJwk) {
+  const signingInput = `${base64UrlJson(header)}.${base64UrlJson(payload)}`;
+  const privateKey = createPrivateKey({ key: privateJwk, format: 'jwk' });
+  return `${signingInput}.${sign(null, Buffer.from(signingInput), privateKey).toString('base64url')}`;
+}
+
+export function verifyCompactJwt(compactJwt, publicJwk) {
+  const [encodedHeader, encodedPayload, encodedSignature, ...extra] = String(compactJwt || '').split('.');
+  if (extra.length || !encodedHeader || !encodedPayload || !encodedSignature) throw new Error('SD-JWT 的 JWS 格式无效');
+  const header = parseBase64UrlJson(encodedHeader);
+  const payload = parseBase64UrlJson(encodedPayload);
+  const publicKey = createPublicKey({ key: publicJwk, format: 'jwk' });
+  const valid = verify(null, Buffer.from(`${encodedHeader}.${encodedPayload}`), publicKey, Buffer.from(encodedSignature, 'base64url'));
+  return { header, payload, valid };
+}
+
 export function signPayload(payload, privateJwk) {
   const bytes = Buffer.from(stableStringify(payload));
   const privateKey = createPrivateKey({ key: privateJwk, format: 'jwk' });
