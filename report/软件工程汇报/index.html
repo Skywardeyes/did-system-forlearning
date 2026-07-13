@@ -96,16 +96,35 @@
         <div class="diagram"><div class="diagram-title"><h3>业务角色与用例图</h3><span>谁使用系统，以及分别完成什么操作</span></div>
           <pre class="mermaid">
 flowchart LR
-  I[Issuer 发行方] --> A((创建与维护 DID))
-  I --> B((签发与管理 VC))
-  H[Holder 持有人] --> C((持有与提交 VC))
-  V[Verifier 验证方] --> D((执行七项验证))
-  M[演示管理员] --> E((重置数据与查询日志))
-  A --> S[信证台]
-  B --> S
-  C --> S
-  D --> S
-  E --> S
+  I["Issuer<br/>签发机构"]
+  H["Holder<br/>凭证持有者"]
+  V["Verifier<br/>验证方"]
+  A["Admin<br/>系统管理员"]
+
+  subgraph SYS["信证台：DID / VC 本地演示系统"]
+    direction TB
+    U1((创建 DID 身份))
+    U2((更新、轮换、停用 DID))
+    U3((签发培训结业 VC))
+    U4((管理 VC 生命周期))
+    U5((完整 VC 七项验证))
+    U6((按需生成选择性披露))
+    U7((验证教学版证明或 SD-JWT))
+    U8((查看披露台账与审计日志))
+    U9((重置并生成演示数据))
+  end
+
+  I --> U1
+  I --> U2
+  I --> U3
+  I --> U4
+  H --> U1
+  H --> U6
+  V --> U5
+  V --> U7
+  V --> U8
+  A --> U8
+  A --> U9
           </pre>
         </div>
       </div>
@@ -186,7 +205,7 @@ flowchart TB
 flowchart LR
   DID["&lt;b&gt;DID_IDENTITY｜DID 身份&lt;/b&gt;&lt;br/&gt;id：内部编号（PK）&lt;br/&gt;did：去中心化标识符（UK）&lt;br/&gt;role：身份角色&lt;br/&gt;method：DID 方法&lt;br/&gt;status：当前状态&lt;br/&gt;version / keyVersion：版本号&lt;br/&gt;document：DID 文档"]
   KEY["&lt;b&gt;KEY_HISTORY｜历史密钥&lt;/b&gt;&lt;br/&gt;didId：所属 DID（FK）&lt;br/&gt;version：密钥版本&lt;br/&gt;publicJwk：历史公钥&lt;br/&gt;retiredAt：停用时间"]
-  VC["&lt;b&gt;CREDENTIAL_RECORD｜凭证记录&lt;/b&gt;&lt;br/&gt;id：凭证编号（PK）&lt;br/&gt;issuerDid：签发方（FK）&lt;br/&gt;holderDid：持有方（FK）&lt;br/&gt;status：生命周期状态&lt;br/&gt;credential：完整凭证&lt;br/&gt;replaces / replacedBy：替换关系"]
+  VC["&lt;b&gt;CREDENTIAL_RECORD｜凭证记录&lt;/b&gt;&lt;br/&gt;id：凭证编号（PK）&lt;br/&gt;credential.issuer：签发方 DID（逻辑 FK）&lt;br/&gt;credential.credentialSubject.id：持有方 DID（逻辑 FK）&lt;br/&gt;status：生命周期状态&lt;br/&gt;credential：完整凭证&lt;br/&gt;disclosureMaterial：教学版内部材料&lt;br/&gt;sdJwtMaterial：SD-JWT 内部材料&lt;br/&gt;replaces / replacedBy：替换关系"]
   VERIFY["&lt;b&gt;VERIFICATION_LOG｜完整验证记录&lt;/b&gt;&lt;br/&gt;credentialId：被验证凭证（FK）&lt;br/&gt;valid：总体结果&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
   DISCLOSE["&lt;b&gt;DISCLOSURE_LOG｜披露验证记录&lt;/b&gt;&lt;br/&gt;credentialId：凭证编号（FK）&lt;br/&gt;format：教学版 / SD-JWT&lt;br/&gt;disclosedPaths：公开字段&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
   LOG["&lt;b&gt;STRUCTURED_LOG｜结构化日志&lt;/b&gt;&lt;br/&gt;correlationId：请求关联号&lt;br/&gt;type / level：类型与级别&lt;br/&gt;module / action：模块与动作&lt;br/&gt;success：执行结果"]
@@ -206,14 +225,14 @@ flowchart LR
   class VERIFY,DISCLOSE,LOG evidence
         </pre>
       </div>
-      <div class="callout"><strong>关系解释：</strong>一个 DID 可以签发或持有多张 VC；一张 VC 可以产生多次验证记录；密钥轮换后旧公钥进入 KEY_HISTORY；凭证替换不会覆盖旧数据，而通过 replaces/replacedBy 形成可追溯关系。</div>
+      <div class="callout"><strong>关系解释：</strong>实际持久化为嵌套 JSON：签发方和持有方 DID 分别位于 <code>credential.issuer</code> 与 <code>credential.credentialSubject.id</code>，本图将其作为逻辑外键表达关系；<code>disclosureMaterial</code> 保存教学版材料，<code>sdJwtMaterial</code> 保存 SD-JWT 的 Issuer JWT 与 Disclosure 材料，普通 API 不返回二者。一张 VC 可产生多次完整验证和披露验证记录；替换通过 <code>replaces/replacedBy</code> 保留追溯关系。</div>
 
       <div class="subsection grid-2">
         <div class="card"><span class="tag">did:example</span><h3>注册型、可变化</h3><p>支持修改名称和 HTTPS 服务地址，使用 expectedVersion 检查并发冲突；轮换时保留历史公钥；停用后不可恢复。</p></div>
         <div class="card"><span class="tag">did:key</span><h3>公钥衍生型、不可变</h3><p>Ed25519 公钥添加 multicodec 前缀后进行 Base58btc 编码，标识与密钥绑定，因此不支持更新、轮换和停用。</p></div>
       </div>
 
-      <div class="subsection diagram"><div class="diagram-title"><h3>VC 生命周期状态机</h3><span>状态转换由 VC_TRANSITIONS 明确限制</span></div>
+      <div class="subsection diagram"><div class="diagram-title"><h3>VC 生命周期状态机</h3><span>人工操作由 VC_TRANSITIONS 限制；过期由有效期自动推导</span></div>
         <pre class="mermaid">
 stateDiagram-v2
   [*] --> active: 签发
@@ -223,14 +242,14 @@ stateDiagram-v2
   suspended --> replaced: 替换
   active --> revoked: 撤销
   suspended --> revoked: 撤销
-  active --> expired: 超过有效期
-  suspended --> expired: 超过有效期
+  active --> expired: validUntil 到期（自动推导）
+  suspended --> expired: validUntil 到期（自动推导）
   replaced --> [*]
   revoked --> [*]
   expired --> [*]
         </pre>
       </div>
-      <div class="callout"><strong>关键含义：</strong>暂停是可逆状态；replaced、revoked 和 expired 是终态。密码学签名可能仍然正确，但只要凭证状态不是 active，最终验证结果仍然失败。</div>
+      <div class="callout"><strong>关键含义：</strong>暂停是可逆状态；replaced、revoked 和 expired 是终态。<code>expired</code> 不是单独的人工操作，而是验证或读取时根据 <code>validUntil</code> 推导出的有效状态。密码学签名可能仍然正确，但只要凭证状态不是 active，最终验证结果仍然失败。</div>
 
       <div class="subsection">
         <h3>七项验证规则</h3>

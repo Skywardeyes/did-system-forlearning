@@ -62,3 +62,18 @@ test('SD-JWT API generates RFC 9901 compact presentations and verifies selected 
   const tampered = `${generated.body.sdJwt.slice(0, -2)}${generated.body.sdJwt.at(-2) === 'A' ? 'B' : 'A'}~`;
   assert.equal((await post(`${app.url}/api/sd-jwt/verify`, { sdJwt: tampered })).body.valid, false);
 });
+
+test('disclosure generation APIs reject a suspended credential', async (t) => {
+  const app = await startTestApp(t);
+  const issuer = (await post(`${app.url}/api/dids`, { name: 'Issuer', role: 'issuer' })).body;
+  const holder = (await post(`${app.url}/api/dids`, { name: 'Holder', role: 'holder' })).body;
+  const issued = (await post(`${app.url}/api/credentials`, { issuerDid: issuer.did, holderDid: holder.did, studentName: 'Student', courseName: 'Course', validUntil: '2099-01-01T00:00:00.000Z' })).body;
+  await post(`${app.url}/api/credentials/${encodeURIComponent(issued.id)}/suspend`);
+
+  const teaching = await post(`${app.url}/api/credentials/${encodeURIComponent(issued.id)}/disclosures`, { paths: ['credentialSubject.course'] });
+  const sdJwt = await post(`${app.url}/api/credentials/${encodeURIComponent(issued.id)}/sd-jwt`, { paths: ['credentialSubject.course'] });
+  assert.equal(teaching.response.status, 400);
+  assert.equal(sdJwt.response.status, 400);
+  assert.match(teaching.body.error, /suspended/);
+  assert.match(sdJwt.body.error, /suspended/);
+});

@@ -45,6 +45,20 @@ test('disclosure verification follows issuer key history and credential lifecycl
   assert.equal(revoked.checks.find((item) => item.key === 'credentialStatus').passed, false);
 });
 
+test('suspended credentials cannot create teaching or SD-JWT disclosure presentations', async (t) => {
+  const { service } = await createFixture(t);
+  const { issuer, holder } = await createDidPair(service);
+  const record = await issueValidCredential(service, issuer, holder);
+
+  await service.suspendCredential(record.id);
+  await assert.rejects(() => service.createDisclosurePresentation(record.id, ['credentialSubject.course']), /suspended/);
+  await assert.rejects(() => service.createSdJwtPresentation(record.id, ['credentialSubject.course']), /suspended/);
+
+  await service.resumeCredential(record.id);
+  await assert.doesNotReject(() => service.createDisclosurePresentation(record.id, ['credentialSubject.course']));
+  await assert.doesNotReject(() => service.createSdJwtPresentation(record.id, ['credentialSubject.course']));
+});
+
 test('service rejects empty, unsupported and legacy disclosure requests', async (t) => {
   const { service, store } = await createFixture(t);
   const { issuer, holder } = await createDidPair(service);
