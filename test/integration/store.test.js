@@ -7,7 +7,7 @@ import { publicDid } from '../../src/store.js';
 
 test('JSON store initializes and persists isolated state', async (t) => {
   const { directory, store } = await createFixture(t);
-  assert.deepEqual(await store.load(), { dids: [], credentials: [], verificationLogs: [] });
+  assert.deepEqual(await store.load(), { dids: [], credentials: [], verificationLogs: [], disclosureVerificationLogs: [] });
   const state = { dids: [{ id: '1' }], credentials: [], verificationLogs: [] };
   await store.save(state);
   assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'store.json'), 'utf8')), state);

@@ -119,6 +119,7 @@ flowchart LR
           <tr><td>FR-04</td><td>VC 验证</td><td>独立返回格式、Issuer、DID、密钥、签名、时间和状态七项结果。</td><td>正常与篡改测试</td></tr>
           <tr><td>FR-05</td><td>VC 生命周期</td><td>支持暂停、恢复、替换、过期和撤销。</td><td>状态机回归测试</td></tr>
           <tr><td>FR-06</td><td>台账与日志</td><td>提供凭证台账、验证记录、结构化日志、搜索和分页。</td><td>UI + API 测试</td></tr>
+          <tr><td>FR-07</td><td>选择性披露</td><td>只提交选中声明，以加盐 SHA-256 摘要和 Issuer 签名验证来源与完整性，并保存披露验证台账。</td><td>正常、篡改、状态与隐私测试</td></tr>
         </tbody></table></div>
       </div>
 
@@ -147,7 +148,7 @@ flowchart TB
   subgraph D[领域层]
     S[VcService]
     M[DidMethodRegistry]
-    C[Ed25519 / Stable JSON / Base58]
+    C[Ed25519 / Stable JSON / Base58 / SHA-256]
     L[LogService / 脱敏]
   end
   subgraph T[持久化层]
@@ -170,8 +171,8 @@ flowchart TB
         <div class="table-wrap"><table><thead><tr><th>层次</th><th>主要文件</th><th>职责</th><th>为什么拆分</th></tr></thead><tbody>
           <tr><td>表现层</td><td><code>public/index.html</code><br><code>public/*.js</code></td><td>导航、表单、凭证台账、验证记录和日志界面。</td><td>让 UI 逻辑不侵入领域规则。</td></tr>
           <tr><td>接口层</td><td><code>src/server.js</code></td><td>静态资源、API 路由、请求限制和错误映射。</td><td>统一 HTTP 协议边界。</td></tr>
-          <tr><td>领域层</td><td><code>src/vc-service.js</code></td><td>DID/VC 业务规则、状态机和七项验证。</td><td>核心行为可直接集成测试。</td></tr>
-          <tr><td>密码学</td><td><code>src/crypto.js</code></td><td>稳定序列化、Base58、Ed25519 签名和验签。</td><td>隔离密码学细节和业务含义。</td></tr>
+          <tr><td>领域层</td><td><code>src/vc-service.js</code></td><td>DID/VC 规则、状态机、完整验证与选择性披露验证。</td><td>核心行为可直接集成测试。</td></tr>
+          <tr><td>密码学</td><td><code>src/crypto.js</code></td><td>稳定序列化、Base58、Ed25519、加盐声明摘要。</td><td>隔离密码学细节和业务含义。</td></tr>
           <tr><td>数据层</td><td><code>src/store.js</code><br><code>src/log-store.js</code></td><td>串行更新、原子写入和独立日志存储。</td><td>降低丢失更新和半写文件风险。</td></tr>
         </tbody></table></div>
       </div>
@@ -186,12 +187,14 @@ flowchart LR
   DID["&lt;b&gt;DID_IDENTITY｜DID 身份&lt;/b&gt;&lt;br/&gt;id：内部编号（PK）&lt;br/&gt;did：去中心化标识符（UK）&lt;br/&gt;role：身份角色&lt;br/&gt;method：DID 方法&lt;br/&gt;status：当前状态&lt;br/&gt;version / keyVersion：版本号&lt;br/&gt;document：DID 文档"]
   KEY["&lt;b&gt;KEY_HISTORY｜历史密钥&lt;/b&gt;&lt;br/&gt;didId：所属 DID（FK）&lt;br/&gt;version：密钥版本&lt;br/&gt;publicJwk：历史公钥&lt;br/&gt;retiredAt：停用时间"]
   VC["&lt;b&gt;CREDENTIAL_RECORD｜凭证记录&lt;/b&gt;&lt;br/&gt;id：凭证编号（PK）&lt;br/&gt;issuerDid：签发方（FK）&lt;br/&gt;holderDid：持有方（FK）&lt;br/&gt;status：生命周期状态&lt;br/&gt;credential：完整凭证&lt;br/&gt;replaces / replacedBy：替换关系"]
-  VERIFY["&lt;b&gt;VERIFICATION_LOG｜验证记录&lt;/b&gt;&lt;br/&gt;credentialId：被验证凭证（FK）&lt;br/&gt;valid：总体结果&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
+  VERIFY["&lt;b&gt;VERIFICATION_LOG｜完整验证记录&lt;/b&gt;&lt;br/&gt;credentialId：被验证凭证（FK）&lt;br/&gt;valid：总体结果&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
+  DISCLOSE["&lt;b&gt;DISCLOSURE_LOG｜披露验证记录&lt;/b&gt;&lt;br/&gt;credentialId：凭证编号（FK）&lt;br/&gt;disclosedPaths：公开字段&lt;br/&gt;failedChecks：失败检查项&lt;br/&gt;checkedAt：验证时间"]
   LOG["&lt;b&gt;STRUCTURED_LOG｜结构化日志&lt;/b&gt;&lt;br/&gt;correlationId：请求关联号&lt;br/&gt;type / level：类型与级别&lt;br/&gt;module / action：模块与动作&lt;br/&gt;success：执行结果"]
   DID -->|"1 对多：保留轮换历史"| KEY
   DID -->|"1 对多：作为签发方"| VC
   DID -->|"1 对多：作为持有方"| VC
   VC -->|"1 对多：产生验证记录"| VERIFY
+  VC -->|"1 对多：产生披露记录"| DISCLOSE
   VC -.->|"0 或 1：替换前后关联"| VC
   DID -.->|"业务操作写入"| LOG
   VC -.->|"业务操作写入"| LOG
@@ -200,7 +203,7 @@ flowchart LR
   classDef evidence fill:#e8f7ef,stroke:#168554,stroke-width:2px,color:#073b26
   class DID,KEY identity
   class VC credential
-  class VERIFY,LOG evidence
+  class VERIFY,DISCLOSE,LOG evidence
         </pre>
       </div>
       <div class="callout"><strong>关系解释：</strong>一个 DID 可以签发或持有多张 VC；一张 VC 可以产生多次验证记录；密钥轮换后旧公钥进入 KEY_HISTORY；凭证替换不会覆盖旧数据，而通过 replaces/replacedBy 形成可追溯关系。</div>
@@ -235,6 +238,29 @@ stateDiagram-v2
           <div class="card"><span class="tag">01</span><h4>格式完整性</h4><p>必要字段、subject 与 proof 是否存在。</p></div><div class="card"><span class="tag">02</span><h4>Issuer 解析</h4><p>本地注册表能否找到签发方。</p></div><div class="card"><span class="tag">03</span><h4>DID 状态</h4><p>签发方是否存在且未停用。</p></div><div class="card"><span class="tag">04</span><h4>密钥版本</h4><p>能否解析当前或历史公钥。</p></div><div class="card"><span class="tag">05</span><h4>Ed25519 签名</h4><p>验证来源并检测内容篡改。</p></div><div class="card"><span class="tag">06</span><h4>有效期</h4><p>当前时间是否处于有效区间。</p></div><div class="card"><span class="tag">07</span><h4>VC 状态</h4><p>本地记录是否仍为 active。</p></div><div class="card"><span class="tag">RESULT</span><h4>总体结论</h4><p>七项全部通过才返回 valid=true。</p></div>
         </div>
       </div>
+
+      <div class="subsection diagram"><div class="diagram-title"><h3>教学版选择性披露</h3><span>不提交完整 VC，只公开本次需要验证的声明</span></div><pre class="mermaid">
+flowchart TB
+  subgraph ISSUE["① 签发时准备"]
+    direction LR
+    VC[完整 VC] --> S[声明生成 16 字节随机盐]
+    S --> H[SHA-256 路径 + 盐 + 值]
+    H --> M[Issuer 签名摘要清单]
+  end
+  subgraph PRESENT["② Holder 生成证明"]
+    direction LR
+    D[选择公开字段] --> P[提交选中值与盐]
+    P --> X[隐藏字段只保留摘要]
+  end
+  subgraph VERIFY["③ Verifier 验证与留痕"]
+    direction LR
+    V[重算公开字段摘要] --> R[检查 Issuer / 签名 / 时间 / 状态]
+    R --> L[写入披露证明验证台账]
+  end
+  M --> D
+  X --> V
+      </pre></div>
+      <div class="callout"><strong>隐私与边界：</strong>披露证明只包含选中字段的值与盐，未选字段只保留签名保护的摘要；普通 API 不返回完整披露材料。该方案真实支持部分声明验证，但属于教学协议，不是 BBS+、零知识证明或正式 SD-JWT VC。</div>
 
       <div class="subsection diagram"><div class="diagram-title"><h3>VC 签发与验证时序图</h3><span>从页面操作到签名、存储、验证和日志</span></div>
         <pre class="mermaid">
@@ -298,6 +324,12 @@ sequenceDiagram
         <div class="card"><span class="tag">公开投影</span><h3><code>publicDid()</code></h3><p>从身份对象中移除当前 privateJwk，并递归移除 keyHistory 中的历史私钥。浏览器只获得验签所需的公开数据。</p></div>
         <div class="card"><span class="tag">日志脱敏</span><h3><code>redact()</code></h3><p>private、secret、token、password、authorization、cookie、proofValue、credential 和请求体在持久化前统一替换。</p></div>
       </div>
+      <div class="subsection grid-2">
+        <div class="code-panel"><div class="code-head"><span>src/crypto.js</span><span>加盐声明摘要</span></div><pre><code>createHash('sha256')
+  .update(stableStringify({ path, salt, value }))
+  .digest('base64url');</code></pre></div>
+        <div class="code-explain"><h3>为什么必须有随机盐？</h3><ol><li>只对姓名、状态等低熵字段直接哈希，容易被枚举猜测。</li><li>每个声明使用 16 字节随机盐，同值也得到不同摘要。</li><li>披露时只提交选中字段的盐；未披露字段的盐留在本地。</li><li>Issuer 对完整摘要清单签名，防止替换摘要。</li></ol></div>
+      </div>
       <div class="subsection">
         <h3>HTTP 安全边界</h3><div class="table-wrap"><table><thead><tr><th>边界</th><th>实现</th><th>目的</th></tr></thead><tbody>
           <tr><td>内容类型</td><td>写接口要求 <code>application/json</code></td><td>拒绝协议不明确的请求体。</td></tr><tr><td>请求大小</td><td>累计读取不得超过 1 MB</td><td>限制异常大请求占用内存。</td></tr><tr><td>静态路径</td><td><code>path.resolve</code> 后检查 publicRoot</td><td>阻止编码后的目录穿越。</td></tr><tr><td>响应头</td><td>CSP、no-referrer、nosniff</td><td>建立基础浏览器安全约束。</td></tr><tr><td>错误映射</td><td>400 / 404 / 409 / 413 / 415</td><td>让客户端和测试获得稳定契约。</td></tr>
@@ -321,10 +353,10 @@ flowchart TB
   S -.横向覆盖.-> U
       </pre></div>
       <div class="subsection metric-row">
-        <div class="metric"><b>124/124</b><span>最新 Node 测试，本轮实际通过</span></div><div class="metric"><b>43/43</b><span>上一轮 Chromium UI 记录</span></div><div class="metric"><b>20/20</b><span>proof 篡改稳定性循环</span></div><div class="metric"><b>6</b><span>端到端核心业务旅程</span></div>
+        <div class="metric"><b>130/130</b><span>最新 Node 测试，本轮实际通过</span></div><div class="metric"><b>44/44</b><span>Chromium UI 本轮实际通过</span></div><div class="metric"><b>20/20</b><span>proof 篡改稳定性循环</span></div><div class="metric"><b>6</b><span>端到端核心业务旅程</span></div>
       </div>
       <div class="subsection"><h3>各层测试解决什么问题</h3><div class="table-wrap"><table><thead><tr><th>层级</th><th>重点</th><th>代表性问题</th></tr></thead><tbody>
-        <tr><td>单元</td><td>Stable JSON、Base58、Ed25519、Method、分页、脱敏</td><td>同一对象能否稳定签名？Base58 前导零是否正确？</td></tr><tr><td>集成</td><td>Store、Log、DID/VC Service 协作</td><td>并发创建是否丢失数据？历史密钥能否验证旧 VC？</td></tr><tr><td>API</td><td>全部路由、状态码、错误和分页契约</td><td>非法 JSON、错误 Content-Type、版本冲突如何响应？</td></tr><tr><td>功能</td><td>四种 Method 组合与完整生命周期</td><td>暂停、恢复、替换、撤销是否遵守状态机？</td></tr><tr><td>安全</td><td>私钥暴露、XSS、原型污染、目录穿越</td><td>公开 API 或日志是否泄露敏感数据？</td></tr><tr><td>UI</td><td>导航、表单、台账、验证原因、日志、响应式</td><td>真实用户能否完整走通产品流程？</td></tr>
+        <tr><td>单元</td><td>Stable JSON、Base58、Ed25519、加盐摘要、分页、脱敏</td><td>摘要能否稳定生成并检测值、盐和路径变化？</td></tr><tr><td>集成</td><td>Store、Log、DID/VC 与披露服务协作</td><td>密钥轮换后旧披露证明能否验证？撤销后是否失败？</td></tr><tr><td>API</td><td>全部路由、状态码、披露生成验证和分页契约</td><td>未披露值与随机盐是否从普通 API 隔离？</td></tr><tr><td>功能</td><td>四种 Method 组合、完整生命周期、选择性披露</td><td>公开字段篡改是否失败？披露台账是否记录原因？</td></tr><tr><td>安全</td><td>私钥、披露材料、XSS、原型污染、目录穿越</td><td>公开 API 或日志是否泄露敏感数据？</td></tr><tr><td>UI</td><td>六个入口、表单、台账、验证原因、日志、响应式</td><td>真实用户能否生成、验证并篡改披露证明？</td></tr>
       </tbody></table></div></div>
       <div class="subsection diagram"><div class="diagram-title"><h3>可验证测试证据链</h3><span>测试结论不只依赖一张终端截图</span></div><pre class="mermaid">
 flowchart LR
@@ -357,7 +389,7 @@ flowchart LR
   class H,V,Q trust
       </pre></div>
       <div class="callout"><strong>证据含义：</strong>批次记录 Git 提交、工作区状态、运行环境、阶段退出码、用例统计和原始输出；SHA-256 清单可以发现证据文件缺失、新增或内容被修改。</div>
-      <div class="callout warn"><strong>当前口径：</strong>Node 124 项已经在当前代码上复核通过；43 项 UI 来自上一轮执行记录，正式汇报前应在演示电脑重新安装 Playwright、执行全量测试并生成最终证据批次。</div>
+      <div class="callout warn"><strong>当前口径：</strong>当前代码已实际复核 Node 130/130、Chromium UI 44/44；其中包含选择性披露生成、隐藏字段不外发、摘要篡改、历史密钥、凭证撤销、验证台账与移动布局。正式汇报前仍应执行 <code>npm run test:evidence</code> 生成最终证据批次。</div>
     </section>
 
     <section class="section" id="demo">
@@ -369,7 +401,8 @@ flowchart LR
         <div class="demo-step"><div><h3>正常验证</h3><p>展示七项全部通过，并在验证记录台账看到成功结果。</p></div><div class="time">00:50</div></div>
         <div class="demo-step"><div><h3>模拟篡改</h3><p>只改学员姓名，再次验证，观察 Ed25519 签名失败。</p></div><div class="time">00:35</div></div>
         <div class="demo-step"><div><h3>暂停与恢复</h3><p>暂停后签名仍正确但状态失败；恢复后同一张原始 VC 重新通过。</p></div><div class="time">01:05</div></div>
-        <div class="demo-step"><div><h3>替换与撤销</h3><p>替换生成新 ID，旧凭证进入 replaced；撤销新凭证后验证状态失败。</p></div><div class="time">01:45</div></div>
+        <div class="demo-step"><div><h3>替换与撤销</h3><p>替换生成新 ID，旧凭证进入 replaced；撤销新凭证后验证状态失败。</p></div><div class="time">01:00</div></div>
+        <div class="demo-step"><div><h3>选择性披露</h3><p>只公开课程与完成日期，验证成功并写入台账；篡改课程后摘要失败。</p></div><div class="time">00:45</div></div>
         <div class="demo-step"><div><h3>查看结构化日志</h3><p>展示 action、correlationId、失败检查项和脱敏详情。</p></div><div class="time">00:50</div></div>
       </div>
     </section>
@@ -400,7 +433,7 @@ flowchart LR
     <section class="closing">
       <h2>Build. Verify. Learn.</h2>
       <p>让 AI 提速，让测试作证，让人负责。我们完成的不只是一个可运行页面，而是一条从需求到证据的软件工程链路。</p>
-      <div class="closing-grid"><div><b>技术成果</b>完成 DID、VC、七项验证、生命周期和日志闭环。</div><div><b>工程成果</b>完成需求、设计、编码、测试和证据归档。</div><div><b>学习成果</b>形成可解释、可复核的人机协作方法。</div></div>
+      <div class="closing-grid"><div><b>技术成果</b>完成 DID、VC、完整验证、选择性披露、生命周期与日志闭环。</div><div><b>工程成果</b>完成需求、设计、编码、测试和证据归档。</div><div><b>学习成果</b>形成可解释、可复核的人机协作方法。</div></div>
     </section>
   </main>
 

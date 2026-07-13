@@ -20,6 +20,7 @@
           <button class="nav-item" data-view="identities"><span>身</span>DID 身份</button>
           <button class="nav-item" data-view="issue"><span>签</span>凭证签发</button>
           <button class="nav-item" data-view="verify"><span>验</span>凭证验证</button>
+          <button class="nav-item" data-view="disclosure"><span>隐</span>选择性披露</button>
           <button class="nav-item" data-view="logs"><span>志</span>日志中心</button>
         </nav>
         <div class="sidebar-foot">
@@ -125,6 +126,42 @@
             <div class="section-heading"><div><p>VERIFICATION REGISTER</p><h2>验证记录台账</h2></div></div>
             <div class="list-tools search-tools"><label for="verify-log-search">搜索</label><div class="search-input-wrap"><input id="verify-log-search" placeholder="支持模糊搜索" /><button id="verify-log-search-clear" class="search-clear" type="button" aria-label="清除搜索内容" hidden>×</button></div><button id="verify-log-search-submit" class="button secondary search-submit" type="button">搜索</button></div>
             <div class="table-wrap"><table><thead><tr><th>凭证 ID</th><th>验证结果</th><th>失败原因备注</th><th>验证时间</th></tr></thead><tbody id="verification-log-table"></tbody></table></div><div id="verify-log-pagination"></div>
+          </section>
+        </section>
+
+        <section class="view" id="view-disclosure">
+          <div class="section-heading"><div><p>SELECTIVE DISCLOSURE</p><h2>教学版选择性披露</h2></div></div>
+          <div class="note disclosure-note">持有人只提交选中的声明、随机盐、摘要清单和 Issuer 签名；未选择字段不会进入披露证明。本功能是教学实现，不是正式 SD-JWT VC 或 BBS+。</div>
+          <div class="verify-layout disclosure-layout">
+            <section class="panel form-panel">
+              <div class="section-heading"><div><p>CREATE PRESENTATION</p><h2>生成披露证明</h2></div></div>
+              <div class="disclosure-controls">
+              <label>选择凭证<select id="disclosure-credential" required></select></label>
+              <fieldset class="disclosure-fields"><legend>选择要公开的字段</legend>
+                <label><input type="checkbox" value="credentialSubject.name" /><span>学员姓名</span></label>
+                <label><input type="checkbox" value="credentialSubject.course" checked /><span>课程名称</span></label>
+                <label><input type="checkbox" value="credentialSubject.completionDate" checked /><span>完成日期</span></label>
+                <label><input type="checkbox" value="credentialSubject.achievement" /><span>完成状态</span></label>
+              </fieldset>
+              <button class="button primary" id="generate-disclosure" type="button">生成披露证明</button>
+              <div class="privacy-summary" id="disclosure-privacy-summary">请选择凭证和需要公开的字段。</div>
+              </div>
+            </section>
+            <section class="panel code-panel input-panel">
+              <div class="section-heading"><div><p>DISCLOSURE PRESENTATION</p><h2>披露证明 JSON</h2></div><button class="text-button danger-text" id="tamper-disclosure" type="button">模拟篡改课程</button></div>
+              <textarea id="disclosure-input" spellcheck="false" placeholder="生成披露证明后将在此显示"></textarea>
+              <button class="button primary" id="verify-disclosure" type="button">验证披露证明</button>
+            </section>
+          </div>
+          <section class="panel result-panel disclosure-result-panel">
+            <div class="section-heading"><div><p>DISCLOSURE VERIFICATION</p><h2>选择性披露验证报告</h2></div><span class="result-badge idle" id="disclosure-result-badge">等待验证</span></div>
+            <div id="disclosure-results" class="check-list empty-state">生成并提交披露证明后，这里会验证 Issuer、摘要清单签名、已披露字段、有效期和凭证状态。</div>
+          </section>
+          <section class="panel record-panel page-ledger disclosure-ledger">
+            <div class="section-heading"><div><p>DISCLOSURE VERIFICATION REGISTER</p><h2>披露证明验证台账</h2></div></div>
+            <div class="list-tools search-tools"><label for="disclosure-log-search">搜索</label><div class="search-input-wrap"><input id="disclosure-log-search" placeholder="搜索凭证、公开字段或失败项" /><button id="disclosure-log-search-clear" class="search-clear" type="button" aria-label="清除搜索内容" hidden>×</button></div><button id="disclosure-log-search-submit" class="button secondary search-submit" type="button">搜索</button></div>
+            <div class="table-wrap"><table><thead><tr><th>凭证 ID</th><th>验证结果</th><th>本次公开字段</th><th>失败原因</th><th>验证时间</th></tr></thead><tbody id="disclosure-verification-log-table"><tr><td colspan="5" class="empty-state">暂无披露验证记录</td></tr></tbody></table></div>
+            <div id="disclosure-log-pagination"></div>
           </section>
         </section>
 

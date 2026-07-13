@@ -3,12 +3,12 @@ import { applyListAction, createListState, renderPagination } from './list-ui.js
 import { applyLogFilter, createLogFilters, renderLogRow } from './log-ui.js';
 import { credentialRows, verificationRows } from './credential-ledger-ui.js';
 
-const state = { dids: [], credentials: [], verificationLogs: [], structuredLogs: [], selectedCredential: null };
-const listStates = { did: createListState(), vc: createListState(), log: createListState() };
-const listMeta = { did: {}, vc: {}, log: {} };
+const state = { dids: [], credentials: [], verificationLogs: [], disclosureVerificationLogs: [], structuredLogs: [], selectedCredential: null };
+const listStates = { did: createListState(), vc: createListState(), log: createListState(), disclosureLog: createListState() };
+const listMeta = { did: {}, vc: {}, log: {}, disclosureLog: {} };
 const structuredLogFilters = createLogFilters();
 const structuredLogMeta = {};
-const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证', logs: '日志中心' };
+const titles = { overview: '运行总览', identities: 'DID 身份', issue: '凭证签发', verify: '凭证验证', disclosure: '选择性披露', logs: '日志中心' };
 
 const $ = (selector) => document.querySelector(selector);
 const $$ = (selector) => [...document.querySelectorAll(selector)];
@@ -52,17 +52,46 @@ function render() {
   renderDids();
   renderCredentials();
   renderLogs();
+  renderDisclosureLogs();
   renderStructuredLogs();
   renderSelects();
+  renderDisclosureSelect();
   $('#did-pagination').innerHTML = renderPagination(listMeta.did, { id: 'did', pageSize: listStates.did.pageSize });
   $('#vc-pagination').innerHTML = renderPagination(listMeta.vc, { id: 'vc', pageSize: listStates.vc.pageSize });
   $('#issue-vc-pagination').innerHTML = renderPagination(listMeta.vc, { id: 'issue-vc', pageSize: listStates.vc.pageSize });
   $('#log-pagination').innerHTML = renderPagination(listMeta.log, { id: 'log', pageSize: listStates.log.pageSize });
   $('#verify-log-pagination').innerHTML = renderPagination(listMeta.log, { id: 'verify-log', pageSize: listStates.log.pageSize });
+  $('#disclosure-log-pagination').innerHTML = renderPagination(listMeta.disclosureLog, { id: 'disclosure-log', pageSize: listStates.disclosureLog.pageSize });
   bindPagination('did'); bindPagination('vc'); bindPagination('log');
   bindAliasPagination('issue-vc', 'vc'); bindAliasPagination('verify-log', 'log');
+  bindAliasPagination('disclosure-log', 'disclosureLog');
   $('#issue-vc-search').value = listStates.vc.search;
   $('#verify-log-search').value = listStates.log.search;
+  $('#disclosure-log-search').value = listStates.disclosureLog.search;
+}
+
+function renderDisclosureLogs() {
+  const tbody = $('#disclosure-verification-log-table');
+  if (!state.disclosureVerificationLogs.length) {
+    tbody.innerHTML = '<tr><td colspan="5" class="empty-state">暂无披露验证记录</td></tr>';
+    return;
+  }
+  const fieldLabels = { 'credentialSubject.name': '姓名', 'credentialSubject.course': '课程', 'credentialSubject.completionDate': '完成日期', 'credentialSubject.achievement': '完成状态' };
+  const failureLabels = { format: '格式无效', issuer: 'Issuer 不存在', didStatus: 'Issuer 已停用', keyVersion: '密钥不可用', manifestSignature: '摘要清单签名无效', disclosedClaims: '公开字段摘要不一致', validity: '凭证不在有效期', credentialStatus: '凭证状态不可用' };
+  tbody.innerHTML = state.disclosureVerificationLogs.map((log) => {
+    const disclosed = (log.disclosedPaths || []).map((path) => fieldLabels[path] || path).join('、') || '无';
+    const failures = log.valid ? '全部检查通过' : (log.failedChecks || []).map((key) => failureLabels[key] || key).join('、');
+    return `<tr><td title="${escapeHtml(log.credentialId || '')}">${log.credentialId ? short(log.credentialId, 22) : '未知凭证'}</td><td><span class="status ${log.valid ? 'active' : 'revoked'}">${log.valid ? '验证通过' : '验证失败'}</span></td><td>${escapeHtml(disclosed)}</td><td>${escapeHtml(failures)}</td><td>${formatDate(log.checkedAt)}</td></tr>`;
+  }).join('');
+}
+
+function renderDisclosureSelect() {
+  const select = $('#disclosure-credential');
+  const previous = select.value;
+  const records = state.credentials.filter((item) => item.selectiveDisclosureAvailable);
+  select.innerHTML = `<option value="">请选择支持选择性披露的凭证</option>${records.map((record) => `<option value="${escapeHtml(record.id)}">${escapeHtml(record.credential.credentialSubject.name)} · ${escapeHtml(record.credential.credentialSubject.course)} · ${escapeHtml(record.status)}</option>`).join('')}`;
+  if (records.some((item) => item.id === previous)) select.value = previous;
+  else if (records[0]) select.value = records[0].id;
 }
 
 function renderStructuredLogs() {
@@ -148,6 +177,15 @@ function renderVerification(result) {
   container.innerHTML = result.checks.map((check) => `<div class="check-item ${check.passed ? '' : 'failed'}"><div class="check-icon">${check.passed ? '✓' : '×'}</div><div><strong>${check.label}</strong><small>${escapeHtml(check.detail)}</small></div></div>`).join('');
 }
 
+function renderDisclosureVerification(result) {
+  const badge = $('#disclosure-result-badge');
+  badge.className = `result-badge ${result.valid ? 'valid' : 'invalid'}`;
+  badge.textContent = result.valid ? '验证通过' : '验证失败';
+  const container = $('#disclosure-results');
+  container.className = 'check-list';
+  container.innerHTML = result.checks.map((check) => `<div class="check-item ${check.passed ? '' : 'failed'}"><div class="check-icon">${check.passed ? '✓' : '×'}</div><div><strong>${escapeHtml(check.label)}</strong><small>${escapeHtml(check.detail)}</small></div></div>`).join('');
+}
+
 function escapeHtml(value) {
   return String(value).replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
 }
@@ -155,9 +193,9 @@ function escapeHtml(value) {
 async function refresh() {
   const base = await api('/api/state');
   const load = (type, endpoint) => api(`${endpoint}?${new URLSearchParams(listStates[type])}`);
-  const [dids, credentials, logs, structured] = await Promise.all([load('did', '/api/dids'), load('vc', '/api/credentials'), load('log', '/api/verification-logs'), api(`/api/logs?${new URLSearchParams(structuredLogFilters)}`)]);
-  Object.assign(state, base, { dids: dids.items, credentials: credentials.items, verificationLogs: logs.items, structuredLogs: structured.items });
-  Object.assign(listMeta.did, dids); Object.assign(listMeta.vc, credentials); Object.assign(listMeta.log, logs);
+  const [dids, credentials, logs, disclosureLogs, structured] = await Promise.all([load('did', '/api/dids'), load('vc', '/api/credentials'), load('log', '/api/verification-logs'), load('disclosureLog', '/api/disclosure-verification-logs'), api(`/api/logs?${new URLSearchParams(structuredLogFilters)}`)]);
+  Object.assign(state, base, { dids: dids.items, credentials: credentials.items, verificationLogs: logs.items, disclosureVerificationLogs: disclosureLogs.items, structuredLogs: structured.items });
+  Object.assign(listMeta.did, dids); Object.assign(listMeta.vc, credentials); Object.assign(listMeta.log, logs); Object.assign(listMeta.disclosureLog, disclosureLogs);
   Object.assign(structuredLogMeta, structured);
   render();
 }
@@ -206,6 +244,7 @@ for (const type of ['did', 'vc', 'log']) {
 }
 bindSearchControls('issue-vc', (value) => changeList('vc', { type: 'search', value }));
 bindSearchControls('verify-log', (value) => changeList('log', { type: 'search', value }));
+bindSearchControls('disclosure-log', (value) => changeList('disclosureLog', { type: 'search', value }));
 
 bindSearchControls('structured-log', (value) => changeStructuredLogs({ type: 'search', value }));
 
@@ -290,6 +329,46 @@ $('#load-latest').addEventListener('click', () => {
 $('#tamper-name').addEventListener('click', () => {
   try { const credential = JSON.parse($('#verify-input').value); credential.credentialSubject.name = `${credential.credentialSubject.name}（已修改）`; $('#verify-input').value = JSON.stringify(credential, null, 2); toast('已修改姓名，可执行验证观察签名失败'); }
   catch { toast('请先载入有效的 VC JSON', true); }
+});
+
+$('#generate-disclosure').addEventListener('click', async () => {
+  const credentialId = $('#disclosure-credential').value;
+  const paths = $$('.disclosure-fields input:checked').map((input) => input.value);
+  if (!credentialId) return toast('请选择一张支持选择性披露的凭证', true);
+  if (!paths.length) return toast('请至少选择一个公开字段', true);
+  try {
+    const presentation = await api(`/api/credentials/${encodeURIComponent(credentialId)}/disclosures`, { method: 'POST', body: JSON.stringify({ paths }) });
+    $('#disclosure-input').value = JSON.stringify(presentation, null, 2);
+    const labels = { 'credentialSubject.name': '学员姓名', 'credentialSubject.course': '课程名称', 'credentialSubject.completionDate': '完成日期', 'credentialSubject.achievement': '完成状态' };
+    const hidden = Object.entries(labels).filter(([path]) => !paths.includes(path)).map(([, label]) => label);
+    $('#disclosure-privacy-summary').textContent = `已公开：${paths.map((path) => labels[path]).join('、')}；未公开：${hidden.join('、') || '无'}。披露证明不包含完整 VC。`;
+    $('#disclosure-result-badge').className = 'result-badge idle';
+    $('#disclosure-result-badge').textContent = '等待验证';
+    $('#disclosure-results').className = 'check-list empty-state';
+    $('#disclosure-results').textContent = '披露证明已生成，请执行验证。';
+    toast('选择性披露证明已生成');
+  } catch (error) { toast(error.message, true); }
+});
+
+$('#verify-disclosure').addEventListener('click', async () => {
+  try {
+    const presentation = JSON.parse($('#disclosure-input').value);
+    const result = await api('/api/disclosures/verify', { method: 'POST', body: JSON.stringify({ presentation }) });
+    renderDisclosureVerification(result);
+    await refresh();
+    toast(result.valid ? '选择性披露验证通过' : '选择性披露验证失败', !result.valid);
+  } catch (error) { toast(error instanceof SyntaxError ? '披露证明 JSON 格式无效' : error.message, true); }
+});
+
+$('#tamper-disclosure').addEventListener('click', () => {
+  try {
+    const presentation = JSON.parse($('#disclosure-input').value);
+    const course = presentation.disclosedClaims?.find((item) => item.path === 'credentialSubject.course');
+    if (!course) return toast('当前证明没有公开课程字段', true);
+    course.value = `${course.value}（已修改）`;
+    $('#disclosure-input').value = JSON.stringify(presentation, null, 2);
+    toast('已修改公开课程，可再次验证观察摘要失败');
+  } catch { toast('请先生成有效的披露证明', true); }
 });
 
 $('#copy-vc').addEventListener('click', async () => {

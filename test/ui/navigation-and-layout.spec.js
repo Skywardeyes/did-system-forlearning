@@ -6,11 +6,11 @@ test.beforeEach(async ({ page, request }) => {
   await expect(page.locator('#stat-dids')).toHaveText('2');
 });
 
-test('all five views navigate and expose their primary controls', async ({ page }) => {
+test('all six views navigate and expose their primary controls', async ({ page }) => {
   const views = [
-    ['overview', '#view-overview'], ['identities', '#did-form'], ['issue', '#issue-form'], ['verify', '#verify-input'], ['logs', '#structured-log-table'],
+    ['overview', '#view-overview'], ['identities', '#did-form'], ['issue', '#issue-form'], ['verify', '#verify-input'], ['disclosure', '#disclosure-input'], ['logs', '#structured-log-table'],
   ];
-  await expect(page.locator('.nav-item')).toHaveCount(5);
+  await expect(page.locator('.nav-item')).toHaveCount(6);
   for (const [view, target] of views) {
     await page.locator(`[data-view="${view}"]`).click();
     await expect(page.locator(target)).toBeVisible();

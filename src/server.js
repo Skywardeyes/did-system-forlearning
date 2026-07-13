@@ -95,6 +95,7 @@ async function handleApi(request, response, url, activeService, logService, corr
   if (request.method === 'GET' && url.pathname === '/api/dids') return sendJson(response, 200, await activeService.listDids(query));
   if (request.method === 'GET' && url.pathname === '/api/credentials') return sendJson(response, 200, await activeService.listCredentials(query));
   if (request.method === 'GET' && url.pathname === '/api/verification-logs') return sendJson(response, 200, await activeService.listVerificationLogs(query));
+  if (request.method === 'GET' && url.pathname === '/api/disclosure-verification-logs') return sendJson(response, 200, await activeService.listDisclosureVerificationLogs(query));
   if (request.method === 'POST' && url.pathname === '/api/dids') {
     return sendJson(response, 201, await activeService.createDid(await readJson(request)));
   }
@@ -104,6 +105,10 @@ async function handleApi(request, response, url, activeService, logService, corr
   if (request.method === 'POST' && url.pathname === '/api/verify') {
     const body = await readJson(request);
     return sendJson(response, 200, await activeService.verifyCredential(body.credential));
+  }
+  if (request.method === 'POST' && url.pathname === '/api/disclosures/verify') {
+    const body = await readJson(request);
+    return sendJson(response, 200, await activeService.verifyDisclosurePresentation(body.presentation));
   }
   if (request.method === 'POST' && url.pathname === '/api/demo/reset') {
     return sendJson(response, 200, await activeService.resetDemo());
@@ -116,6 +121,12 @@ async function handleApi(request, response, url, activeService, logService, corr
     if (request.method === 'PATCH' && !didAction[2]) return sendJson(response, 200, await activeService.updateDid(id, body));
     if (request.method === 'POST' && didAction[2] === 'rotate-key') return sendJson(response, 200, await activeService.rotateDidKey(id, body));
     if (request.method === 'POST' && didAction[2] === 'deactivate') return sendJson(response, 200, await activeService.deactivateDid(id, body));
+  }
+
+  const disclosureAction = url.pathname.match(/^\/api\/credentials\/(.+)\/disclosures$/);
+  if (request.method === 'POST' && disclosureAction) {
+    const body = await readJson(request);
+    return sendJson(response, 200, await activeService.createDisclosurePresentation(decodeURIComponent(disclosureAction[1]), body.paths));
   }
 
   const vcAction = url.pathname.match(/^\/api\/credentials\/(.+)\/(suspend|resume|replace|revoke)$/);

@@ -48,7 +48,7 @@
 - 真实 `did:web` 发布与 HTTPS 域名运维；
 - 外部通用 DID Resolver 或生产钱包互操作；
 - 正式 W3C Data Integrity cryptosuite 兼容声明；
-- Bitstring Status List、零知识证明、选择性披露；
+- Bitstring Status List、BBS+、零知识证明或正式 SD-JWT VC；教学版加盐摘要选择性披露属于本期扩展能力；
 - 拼音、分词、多关键词布尔表达式；
 - 明确容量指标前的性能压测。
 

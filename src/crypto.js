@@ -1,7 +1,9 @@
 import {
   createPrivateKey,
   createPublicKey,
+  createHash,
   generateKeyPairSync,
+  randomBytes,
   randomUUID,
   sign,
   verify,
@@ -37,6 +39,29 @@ export function stableStringify(value) {
     .filter((key) => value[key] !== undefined)
     .map((key) => `${JSON.stringify(key)}:${stableStringify(value[key])}`);
   return `{${entries.join(',')}}`;
+}
+
+export function createDisclosureSalt() {
+  return randomBytes(16).toString('base64url');
+}
+
+export function createClaimDigest(path, salt, value) {
+  return createHash('sha256')
+    .update(stableStringify({ path, salt, value }))
+    .digest('base64url');
+}
+
+export function signPayload(payload, privateJwk) {
+  const bytes = Buffer.from(stableStringify(payload));
+  const privateKey = createPrivateKey({ key: privateJwk, format: 'jwk' });
+  return sign(null, bytes, privateKey).toString('base64url');
+}
+
+export function verifyPayload(payload, publicJwk, signature) {
+  if (!signature) return false;
+  const bytes = Buffer.from(stableStringify(payload));
+  const publicKey = createPublicKey({ key: publicJwk, format: 'jwk' });
+  return verify(null, bytes, publicKey, Buffer.from(signature, 'base64url'));
 }
 
 export function createDidIdentity({ name, role }) {
@@ -81,9 +106,7 @@ export function createDidKeyMaterial(did, version) {
 }
 
 export function signCredential(unsignedCredential, privateJwk) {
-  const payload = Buffer.from(stableStringify(unsignedCredential));
-  const privateKey = createPrivateKey({ key: privateJwk, format: 'jwk' });
-  return sign(null, payload, privateKey).toString('base64url');
+  return signPayload(unsignedCredential, privateJwk);
 }
 
 export function verifyCredentialSignature(credential, publicJwk) {
@@ -91,7 +114,5 @@ export function verifyCredentialSignature(credential, publicJwk) {
   const unsignedCredential = structuredClone(credential);
   const proofValue = unsignedCredential.proof.proofValue;
   delete unsignedCredential.proof;
-  const payload = Buffer.from(stableStringify(unsignedCredential));
-  const publicKey = createPublicKey({ key: publicJwk, format: 'jwk' });
-  return verify(null, payload, publicKey, Buffer.from(proofValue, 'base64url'));
+  return verifyPayload(unsignedCredential, publicJwk, proofValue);
 }

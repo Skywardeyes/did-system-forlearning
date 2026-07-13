@@ -37,8 +37,8 @@ test('日志筛选网格允许列收缩而不撑破面板', () => {
   assert.match(rule, /repeat\(3,\s*minmax\(0,\s*1fr\)\)/);
 });
 
-test('窄屏导航为五个功能入口预留等宽列', () => {
-  assert.match(css, /@media\s*\(max-width:\s*640px\)[\s\S]*nav\s*\{\s*grid-template-columns:\s*repeat\(5,\s*1fr\)/);
+test('窄屏导航为六个功能入口预留等宽列', () => {
+  assert.match(css, /@media\s*\(max-width:\s*640px\)[\s\S]*nav\s*\{\s*grid-template-columns:\s*repeat\(6,\s*1fr\)/);
 });
 
 test('列表工具栏和分页栏与面板边缘保持统一留白', () => {

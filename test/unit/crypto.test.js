@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { base58Encode, createDidIdentity, signCredential, stableStringify, verifyCredentialSignature } from '../../src/crypto.js';
+import { base58Encode, createClaimDigest, createDidIdentity, signCredential, signPayload, stableStringify, verifyCredentialSignature, verifyPayload } from '../../src/crypto.js';
 
 test('stable stringify sorts nested object keys and keeps array order', () => {
   assert.equal(stableStringify({ z: 1, a: { y: 2, x: 3 }, list: [{ b: 2, a: 1 }] }), '{"a":{"x":3,"y":2},"list":[{"a":1,"b":2}],"z":1}');
@@ -28,4 +28,17 @@ test('Ed25519 accepts valid signatures and rejects tampering', () => {
   proofTampered.proof.proofValue = `${proofTampered.proof.proofValue[0] === 'A' ? 'B' : 'A'}${proofTampered.proof.proofValue.slice(1)}`;
   assert.equal(verifyCredentialSignature(proofTampered, identity.publicJwk), false);
   assert.equal(verifyCredentialSignature({ ...unsigned }, identity.publicJwk), false);
+});
+
+test('salted claim digests and signed manifests detect disclosure tampering', () => {
+  const first = createClaimDigest('credentialSubject.course', 'salt-a', 'Course');
+  assert.equal(first, createClaimDigest('credentialSubject.course', 'salt-a', 'Course'));
+  assert.notEqual(first, createClaimDigest('credentialSubject.course', 'salt-b', 'Course'));
+  assert.notEqual(first, createClaimDigest('credentialSubject.course', 'salt-a', 'Other'));
+
+  const identity = createDidIdentity({ name: 'Issuer', role: 'issuer' });
+  const manifest = { credentialId: 'urn:uuid:test', claimDigests: { course: first } };
+  const signature = signPayload(manifest, identity.privateJwk);
+  assert.equal(verifyPayload(manifest, identity.publicJwk, signature), true);
+  assert.equal(verifyPayload({ ...manifest, credentialId: 'urn:uuid:changed' }, identity.publicJwk, signature), false);
 });

@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 
-const EMPTY_STATE = { dids: [], credentials: [], verificationLogs: [] };
+const EMPTY_STATE = { dids: [], credentials: [], verificationLogs: [], disclosureVerificationLogs: [] };
 
 export class JsonStore {
   constructor(filePath) {
@@ -52,5 +52,6 @@ export function publicDid(identity) {
 }
 
 export function publicCredential(record) {
-  return structuredClone(record);
+  const { disclosureMaterial, ...safeRecord } = record;
+  return structuredClone({ ...safeRecord, selectiveDisclosureAvailable: Boolean(disclosureMaterial) });
 }

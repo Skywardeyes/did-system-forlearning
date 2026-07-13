@@ -1,8 +1,16 @@
 import { randomUUID } from 'node:crypto';
-import { createDidKeyMaterial, signCredential, verifyCredentialSignature } from './crypto.js';
+import {
+  createClaimDigest,
+  createDidKeyMaterial,
+  createDisclosureSalt,
+  signCredential,
+  signPayload,
+  verifyCredentialSignature,
+  verifyPayload,
+} from './crypto.js';
 import { DidMethodRegistry } from './did-methods.js';
 import { queryRecords } from './query.js';
-import { publicDid } from './store.js';
+import { publicCredential, publicDid } from './store.js';
 
 const VC_CONTEXT = ['https://www.w3.org/ns/credentials/v2'];
 const VC_TRANSITIONS = {
@@ -10,6 +18,12 @@ const VC_TRANSITIONS = {
   suspended: new Set(['active', 'replaced', 'revoked']),
   replaced: new Set(), expired: new Set(), revoked: new Set(),
 };
+const DISCLOSABLE_CLAIMS = Object.freeze([
+  'credentialSubject.name',
+  'credentialSubject.course',
+  'credentialSubject.completionDate',
+  'credentialSubject.achievement',
+]);
 const AUDIT_ACTIONS = {
   createDid: ['DID_CREATE', 'DID'],
   updateDid: ['DID_UPDATE', 'DID'],
@@ -21,6 +35,8 @@ const AUDIT_ACTIONS = {
   replaceCredential: ['VC_REPLACE', 'VC'],
   revokeCredential: ['VC_REVOKE', 'VC'],
   verifyCredential: ['VC_VERIFY', 'VERIFY'],
+  createDisclosurePresentation: ['VC_DISCLOSE', 'VC'],
+  verifyDisclosurePresentation: ['VC_DISCLOSURE_VERIFY', 'VERIFY'],
   resetDemo: ['DEMO_RESET', 'SYSTEM'],
 };
 
@@ -89,8 +105,9 @@ export class VcService {
     const state = await this.store.load();
     return {
       dids: state.dids.map((item) => publicDid(this.normalizeDid(item))),
-      credentials: state.credentials.map((item) => ({ ...item, status: Date.parse(item.credential.validUntil) < Date.now() && !['replaced', 'revoked'].includes(item.status) ? 'expired' : item.status })),
+      credentials: state.credentials.map((item) => publicCredential({ ...item, status: Date.parse(item.credential.validUntil) < Date.now() && !['replaced', 'revoked'].includes(item.status) ? 'expired' : item.status })),
       verificationLogs: state.verificationLogs.slice(-20).reverse(),
+      disclosureVerificationLogs: (state.disclosureVerificationLogs || []).slice(-20).reverse(),
     };
   }
 
@@ -123,7 +140,7 @@ export class VcService {
 
   async listCredentials(options = {}) {
     const state = await this.store.load();
-    const records = state.credentials.map((record) => ({
+    const records = state.credentials.map((record) => publicCredential({
       ...record,
       status: Date.parse(record.credential.validUntil) < Date.now() && !['replaced', 'revoked'].includes(record.status) ? 'expired' : record.status,
       studentName: record.credential.credentialSubject.name,
@@ -216,7 +233,7 @@ export class VcService {
 
   async issueCredential(input) {
     return this.store.update((state) => {
-      return this.issueCredentialIntoState(state, input);
+      return publicCredential(this.issueCredentialIntoState(state, input));
     });
   }
 
@@ -265,6 +282,34 @@ export class VcService {
         proofValue: signCredential(credential, issuer.privateJwk),
       };
 
+      const claims = Object.fromEntries(DISCLOSABLE_CLAIMS.map((path) => {
+        const key = path.slice('credentialSubject.'.length);
+        const value = credential.credentialSubject[key];
+        const salt = createDisclosureSalt();
+        return [path, { salt, value }];
+      }));
+      const claimDigests = Object.fromEntries(Object.entries(claims).map(([path, claim]) => [
+        path,
+        createClaimDigest(path, claim.salt, claim.value),
+      ]));
+      const disclosureManifest = {
+        type: 'EducationalSelectiveDisclosureManifest2026',
+        credentialId: credential.id,
+        issuer: credential.issuer,
+        validFrom: credential.validFrom,
+        validUntil: credential.validUntil,
+        claimDigests,
+      };
+      const disclosureProof = {
+        type: 'EducationalSelectiveDisclosureProof2026',
+        cryptosuite: 'eddsa-salted-claims-demo-2026',
+        created: now.toISOString(),
+        verificationMethod: issuer.document.assertionMethod[0],
+        keyVersion: issuer.keyVersion || 1,
+        proofPurpose: 'assertionMethod',
+        proofValue: signPayload(disclosureManifest, issuer.privateJwk),
+      };
+
       const record = {
         id,
         credential,
@@ -276,9 +321,125 @@ export class VcService {
         replacedAt: null,
         replacedBy: null,
         replaces,
+        disclosureMaterial: { claims, manifest: disclosureManifest, proof: disclosureProof },
       };
       state.credentials.push(record);
       return record;
+  }
+
+  async listDisclosureVerificationLogs(options = {}) {
+    const state = await this.store.load();
+    const logs = (state.disclosureVerificationLogs || []).map((log) => ({
+      ...log,
+      result: String(log.valid),
+      disclosed: (log.disclosedPaths || []).join(','),
+      failed: (log.failedChecks || []).join(','),
+    }));
+    return queryRecords(logs, { ...options, fields: ['credentialId', 'result', 'disclosed', 'failed'], timeField: 'checkedAt' });
+  }
+
+  async createDisclosurePresentation(id, paths) {
+    const selectedPaths = [...new Set(Array.isArray(paths) ? paths : [])];
+    if (!selectedPaths.length) throw new Error('请至少选择一个披露字段');
+    if (selectedPaths.some((path) => !DISCLOSABLE_CLAIMS.includes(path))) throw new Error('包含不允许披露的字段');
+    const state = await this.store.load();
+    const record = state.credentials.find((item) => item.id === id);
+    if (!record) throw new Error('未找到指定凭证');
+    if (!record.disclosureMaterial) throw new Error('该凭证不包含选择性披露材料，请重新签发');
+    const { claims, manifest, proof } = record.disclosureMaterial;
+    return {
+      type: 'EducationalSelectiveDisclosurePresentation2026',
+      credentialId: manifest.credentialId,
+      issuer: manifest.issuer,
+      validFrom: manifest.validFrom,
+      validUntil: manifest.validUntil,
+      disclosedClaims: selectedPaths.map((path) => ({ path, ...structuredClone(claims[path]) })),
+      claimDigests: structuredClone(manifest.claimDigests),
+      proof: structuredClone(proof),
+    };
+  }
+
+  resolveIssuerKey(issuer, proof) {
+    if (!issuer || !proof) return null;
+    const version = Number(proof.keyVersion || 1);
+    if ((issuer.keyVersion || 1) === version && issuer.document.assertionMethod[0] === proof.verificationMethod) {
+      return { publicJwk: issuer.publicJwk, verificationMethod: issuer.document.assertionMethod[0] };
+    }
+    return issuer.keyHistory?.find((item) => item.version === version && item.verificationMethod === proof.verificationMethod) || null;
+  }
+
+  async verifyDisclosurePresentation(presentation) {
+    const state = await this.store.load();
+    const formatPassed = Boolean(
+      presentation?.type === 'EducationalSelectiveDisclosurePresentation2026'
+      && presentation.credentialId
+      && presentation.issuer
+      && Array.isArray(presentation.disclosedClaims)
+      && presentation.disclosedClaims.length
+      && presentation.claimDigests
+      && presentation.proof?.proofValue,
+    );
+    const issuer = state.dids.find((item) => item.did === presentation?.issuer && item.role === 'issuer');
+    const issuerResolved = Boolean(issuer);
+    const issuerActive = issuerResolved && issuer.status !== 'deactivated';
+    const keyRecord = this.resolveIssuerKey(issuer, presentation?.proof);
+    const keyResolved = Boolean(keyRecord);
+    const manifest = {
+      type: 'EducationalSelectiveDisclosureManifest2026',
+      credentialId: presentation?.credentialId,
+      issuer: presentation?.issuer,
+      validFrom: presentation?.validFrom,
+      validUntil: presentation?.validUntil,
+      claimDigests: presentation?.claimDigests,
+    };
+    let manifestSignaturePassed = false;
+    try {
+      manifestSignaturePassed = keyResolved && verifyPayload(manifest, keyRecord.publicJwk, presentation.proof.proofValue);
+    } catch { manifestSignaturePassed = false; }
+
+    const disclosures = Array.isArray(presentation?.disclosedClaims) ? presentation.disclosedClaims : [];
+    const uniquePaths = new Set(disclosures.map((item) => item?.path));
+    const claimsAllowed = disclosures.length > 0
+      && uniquePaths.size === disclosures.length
+      && disclosures.every((item) => DISCLOSABLE_CLAIMS.includes(item?.path));
+    const claimDigestsPassed = claimsAllowed && disclosures.every((item) => {
+      const expected = presentation?.claimDigests?.[item.path];
+      return typeof expected === 'string' && createClaimDigest(item.path, item.salt, item.value) === expected;
+    });
+
+    const record = state.credentials.find((item) => item.id === presentation?.credentialId);
+    const now = Date.now();
+    const timePassed = Number.isFinite(Date.parse(presentation?.validFrom))
+      && Number.isFinite(Date.parse(presentation?.validUntil))
+      && Date.parse(presentation.validFrom) <= now
+      && now <= Date.parse(presentation.validUntil);
+    const effectiveStatus = record && Date.parse(record.credential.validUntil) < now && !['replaced', 'revoked'].includes(record.status)
+      ? 'expired'
+      : record?.status;
+    const statusPassed = Boolean(record) && effectiveStatus === 'active';
+    const checks = [
+      resultItem('format', '披露证明格式', formatPassed, formatPassed ? '必要字段完整' : '披露证明结构不完整'),
+      resultItem('issuer', 'Issuer DID 解析', issuerResolved, issuerResolved ? '已找到签发方' : '签发方 DID 不存在'),
+      resultItem('didStatus', 'Issuer DID 状态', issuerActive, issuerActive ? '签发方当前有效' : '签发方已停用或不存在'),
+      resultItem('keyVersion', '签名密钥解析', keyResolved, keyResolved ? '已解析当前或历史公钥' : '验证方法或密钥版本不可用'),
+      resultItem('manifestSignature', '摘要清单签名', manifestSignaturePassed, manifestSignaturePassed ? 'Issuer 签名有效' : '摘要清单签名无效'),
+      resultItem('disclosedClaims', '已披露字段摘要', claimDigestsPassed, claimDigestsPassed ? `${disclosures.length} 个披露字段摘要一致` : '披露字段被修改、重复或不受支持'),
+      resultItem('validity', '凭证有效期', timePassed, timePassed ? `有效至 ${presentation?.validUntil}` : '凭证尚未生效、已经过期或时间格式无效'),
+      resultItem('credentialStatus', '凭证当前状态', statusPassed, statusPassed ? '凭证当前有效' : `凭证状态为 ${effectiveStatus || 'missing'}`),
+    ];
+    const result = { valid: checks.every((item) => item.passed), credentialId: presentation?.credentialId || null, checkedAt: new Date().toISOString(), checks };
+    state.disclosureVerificationLogs ||= [];
+    state.disclosureVerificationLogs.push({
+      id: randomUUID(),
+      credentialId: result.credentialId,
+      valid: result.valid,
+      checkedAt: result.checkedAt,
+      disclosedPaths: disclosures.map((item) => item?.path).filter(Boolean),
+      failedChecks: checks.filter((item) => !item.passed).map((item) => item.key),
+    });
+    state.disclosureVerificationLogs = state.disclosureVerificationLogs.slice(-100);
+    await this.store.save(state);
+    return result;
   }
 
   assertVcTransition(record, nextStatus) {
@@ -292,7 +453,7 @@ export class VcService {
       const record = state.credentials.find((item) => item.id === id);
       this.assertVcTransition(record, 'suspended');
       record.status = 'suspended'; record.suspendedAt = new Date().toISOString();
-      return record;
+      return publicCredential(record);
     });
   }
 
@@ -301,7 +462,7 @@ export class VcService {
       const record = state.credentials.find((item) => item.id === id);
       this.assertVcTransition(record, 'active');
       record.status = 'active'; record.resumedAt = new Date().toISOString();
-      return record;
+      return publicCredential(record);
     });
   }
 
@@ -319,7 +480,7 @@ export class VcService {
         validUntil: input.validUntil ?? record.credential.validUntil,
       }, { replaces: record.id });
       record.status = 'replaced'; record.replacedAt = new Date().toISOString(); record.replacedBy = next.id;
-      return next;
+      return publicCredential(next);
     });
   }
 
@@ -329,7 +490,7 @@ export class VcService {
       this.assertVcTransition(record, 'revoked');
       record.status = 'revoked';
       record.revokedAt = new Date().toISOString();
-      return record;
+      return publicCredential(record);
     });
   }
 
@@ -435,7 +596,7 @@ export class VcService {
   }
 
   async resetDemo() {
-    await this.store.save({ dids: [], credentials: [], verificationLogs: [] });
+    await this.store.save({ dids: [], credentials: [], verificationLogs: [], disclosureVerificationLogs: [] });
     const issuer = await this.createDid({ name: '可信学习中心', role: 'issuer' });
     const holder = await this.createDid({ name: '张晓明', role: 'holder', method: 'key' });
     const credential = await this.issueCredential({
