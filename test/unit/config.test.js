@@ -25,6 +25,20 @@ test('returns typed database and kms configuration', () => {
   assert.equal(config.auth.enabled, false);
   assert.equal(config.auth.localDevLogin, false);
   assert.equal(config.application.dataMode, 'dual');
+  assert.equal(config.security.requireHttps, false);
+});
+
+test('production mode requires V2, TLS, database TLS and forbids local login', () => {
+  const secret = Buffer.alloc(32, 8).toString('base64');
+  assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', AUTH_JWT_HS256_SECRET: secret })), /APP_DATA_MODE=v2/);
+  assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret })), /REQUIRE_HTTPS/);
+  assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
+    REQUIRE_HTTPS: 'true' })), /DB_SSL/);
+  assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
+    REQUIRE_HTTPS: 'true', DB_SSL: 'true', AUTH_LOCAL_DEV_LOGIN: 'true' })), /forbids/);
+  const config = loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
+    REQUIRE_HTTPS: 'true', DB_SSL: 'true' }));
+  assert.equal(config.security.production, true);
 });
 
 test('local development login is explicit and requires a JWT secret', () => {

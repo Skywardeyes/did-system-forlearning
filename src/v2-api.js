@@ -1,17 +1,19 @@
 const roles = Object.freeze({
   administrator: ['tenant_admin'],
-  issuer: ['tenant_admin', 'issuer_operator'],
-  holder: ['tenant_admin', 'holder_operator'],
-  verifier: ['tenant_admin', 'verifier_operator'],
+  issuer: ['issuer_operator'],
+  holder: ['holder_operator'],
+  verifier: ['verifier_operator'],
   reader: ['tenant_admin', 'issuer_operator', 'holder_operator', 'verifier_operator'],
+  sensitiveReader: ['credential_data_reader'],
 });
 
 export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
-    localSessionService = null, logService = null }) {
+    credentialAccessService, localSessionService = null, logService = null }) {
     this.authenticator = authenticator; this.accessService = accessService; this.didService = didService;
     this.credentialService = credentialService; this.disclosureService = disclosureService;
     this.verificationService = verificationService; this.localSessionService = localSessionService; this.logService = logService;
+    this.credentialAccessService = credentialAccessService;
   }
 
   async handle(request, url, requestId, readJson) {
@@ -97,6 +99,13 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.administrator);
       return { status: 200, body: await this.logService.query(Object.fromEntries(url.searchParams)) };
     }
+    if (request.method === 'GET' && url.pathname === '/api/v2/sensitive-access-logs') {
+      await this.accessService.requireAnyRole(context, roles.administrator);
+      return { status: 200, body: await this.credentialAccessService.listAccessLogs(context, {
+        page: query.page, pageSize: query.pageSize, credentialId: url.searchParams.get('credentialId') || null,
+        actorId: url.searchParams.get('actorId') || null, purposeCode: url.searchParams.get('purposeCode') || null,
+      }) };
+    }
     const logDetail = url.pathname.match(/^\/api\/v2\/logs\/([^/]+)$/);
     if (request.method === 'GET' && logDetail) {
       await this.accessService.requireAnyRole(context, roles.administrator);
@@ -109,6 +118,7 @@ export class V2Api {
       return { status: 200, body: await this.logService.clear({ correlationId: context.requestId, confirm: (await readJson(request)).confirm }) };
     }
     if (request.method === 'POST' && url.pathname === '/api/v2/demo/reset') {
+      if (!this.localSessionService?.enabled) { const error = new Error('Demo reset is unavailable outside local development'); error.code = 'NOT_FOUND'; throw error; }
       await this.accessService.requireAnyRole(context, roles.administrator);
       const suffix = new Date().toISOString();
       const issuer = await this.didService.createDid(context, { name: `演示签发方 ${suffix}`, role: 'issuer', method: 'example' });
@@ -117,6 +127,14 @@ export class V2Api {
         subjectName: '演示学员', course: 'DID 与 VC 生产链路', completionDate: new Date().toISOString().slice(0, 10),
         validUntil: new Date(Date.now() + 365 * 86_400_000).toISOString() });
       return { status: 200, body: { issuer, holder, credential } };
+    }
+    const contentAccess = url.pathname.match(/^\/api\/v2\/credentials\/([^/]+)\/content-access$/);
+    if (request.method === 'POST' && contentAccess) {
+      await this.accessService.requireAnyRole(context, roles.sensitiveReader);
+      const body = await readJson(request);
+      return { status: 200, body: await this.credentialAccessService.readPlaintext(
+        context, decodeURIComponent(contentAccess[1]), body.purpose,
+      ) };
     }
     const disclose = url.pathname.match(/^\/api\/v2\/credentials\/([^/]+)\/(disclosures|sd-jwt)$/);
     if (request.method === 'POST' && disclose) {

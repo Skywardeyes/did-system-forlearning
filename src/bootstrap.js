@@ -15,6 +15,7 @@ import { CredentialRepository } from './repositories/credential-repository.js';
 import { CredentialStatusEventRepository } from './repositories/credential-status-event-repository.js';
 import { CredentialDisclosureMaterialRepository } from './repositories/credential-disclosure-material-repository.js';
 import { VerificationLogRepository } from './repositories/verification-log-repository.js';
+import { SensitiveAccessLogRepository } from './repositories/sensitive-access-log-repository.js';
 import { MembershipRepository } from './repositories/organization-repository.js';
 import { V2DidService } from './services/v2-did-service.js';
 import { V2CredentialService } from './services/v2-credential-service.js';
@@ -22,6 +23,7 @@ import { V2DisclosureService } from './services/v2-disclosure-service.js';
 import { V2AccessService } from './services/v2-access-service.js';
 import { V2VerificationService } from './services/v2-verification-service.js';
 import { LocalSessionService } from './services/local-session-service.js';
+import { V2CredentialAccessService } from './services/v2-credential-access-service.js';
 import { Hs256RequestAuthenticator } from './auth/request-authenticator.js';
 import { V2Api } from './v2-api.js';
 import { DualAuditLogStore, V2AuditLogStore } from './repositories/v2-audit-log-store.js';
@@ -31,7 +33,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 4 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 5 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -50,6 +52,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const credentialStatusEventRepository = new CredentialStatusEventRepository();
       const disclosureMaterialRepository = new CredentialDisclosureMaterialRepository({ envelopeCrypto });
       const verificationLogRepository = new VerificationLogRepository({ envelopeCrypto });
+      const sensitiveAccessLogRepository = new SensitiveAccessLogRepository();
       const transactionalKms = new TransactionalLocalKms(envelopeCrypto);
       const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, kms: transactionalKms });
       const credentialService = new V2CredentialService({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository,
@@ -57,6 +60,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
       const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
         credentialRepository, verificationLogRepository });
+      const credentialAccessService = new V2CredentialAccessService({ unitOfWork, credentialRepository, sensitiveAccessLogRepository });
       const accessService = new V2AccessService({ unitOfWork, membershipRepository: new MembershipRepository() });
       const authenticator = new Hs256RequestAuthenticator({ secret: config.auth.jwtHs256Secret });
       const localSessionService = new LocalSessionService({
@@ -65,9 +69,10 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
         externalSubject: env.BOOTSTRAP_ADMIN_SUBJECT || 'local-admin',
       });
       v2Api = new V2Api({ authenticator, accessService, didService, credentialService, disclosureService,
-        verificationService, localSessionService, logService });
+        verificationService, credentialAccessService, localSessionService, logService });
     }
-    return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled }), pool, dataMode: config.application.dataMode };
+    return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled,
+      requireHttps: config.security.requireHttps }), pool, dataMode: config.application.dataMode };
   } catch {
     await pool.end?.().catch(() => {});
     const error = new Error('Unable to initialize the configured MySQL database');

@@ -11,12 +11,17 @@ export function verificationFailureNote(log) {
 }
 
 export function credentialRows(records, { escapeHtml, formatDate, short }) {
-  return records.map((record) => `<tr>
-    <td><strong>${escapeHtml(record.credential.credentialSubject.name)}</strong><small title="${escapeHtml(record.id)}">${short(record.id, 18)}</small></td>
-    <td>${escapeHtml(record.credential.credentialSubject.course)}</td><td>${formatDate(record.issuedAt)}</td>
+  return records.map((record) => {
+    const subject = record.credential?.credentialSubject;
+    const name = subject?.name || '受保护的凭证主体';
+    const course = subject?.course || '需授权后查看';
+    return `<tr>
+    <td><strong>${escapeHtml(name)}</strong><small title="${escapeHtml(record.id)}">${short(record.id, 18)}</small></td>
+    <td>${escapeHtml(course)}</td><td>${formatDate(record.issuedAt)}</td>
     <td><span class="status ${escapeHtml(record.status)}">${escapeHtml(record.status)}</span></td>
-    <td><button class="table-action" data-open-vc="${escapeHtml(record.id)}">查看</button>${record.status === 'active' ? ` · <button class="table-action" data-vc-action="suspend" data-id="${escapeHtml(record.id)}">暂停</button> · <button class="table-action" data-vc-action="replace" data-id="${escapeHtml(record.id)}">更新</button> · <button class="table-action" data-revoke="${escapeHtml(record.id)}">撤销</button>` : record.status === 'suspended' ? ` · <button class="table-action" data-vc-action="resume" data-id="${escapeHtml(record.id)}">恢复</button> · <button class="table-action" data-vc-action="replace" data-id="${escapeHtml(record.id)}">更新</button> · <button class="table-action" data-revoke="${escapeHtml(record.id)}">撤销</button>` : ''}</td>
-  </tr>`).join('');
+    <td><button class="table-action" data-open-vc="${escapeHtml(record.id)}">${subject ? '查看' : '授权查看'}</button>${record.status === 'active' ? ` · <button class="table-action" data-vc-action="suspend" data-id="${escapeHtml(record.id)}">暂停</button> · <button class="table-action" data-vc-action="replace" data-id="${escapeHtml(record.id)}">更新</button> · <button class="table-action" data-revoke="${escapeHtml(record.id)}">撤销</button>` : record.status === 'suspended' ? ` · <button class="table-action" data-vc-action="resume" data-id="${escapeHtml(record.id)}">恢复</button> · <button class="table-action" data-vc-action="replace" data-id="${escapeHtml(record.id)}">更新</button> · <button class="table-action" data-revoke="${escapeHtml(record.id)}">撤销</button>` : ''}</td>
+  </tr>`;
+  }).join('');
 }
 
 export function verificationRows(logs, { escapeHtml, formatDate, short }) {

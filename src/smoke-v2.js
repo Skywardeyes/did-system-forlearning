@@ -65,6 +65,21 @@ async function main() {
     if (!credentialVerification.valid || !sdJwtVerification.valid) throw new Error('V2 verification route rejected valid proof material');
     const verificationLedger = await requestJson(baseUrl, token, '/api/v2/disclosure-verification-logs?page=1&pageSize=20');
     const list = await requestJson(baseUrl, token, '/api/v2/credentials?page=1&pageSize=20');
+    if (list.items.some((item) => Object.hasOwn(item, 'credential'))) throw new Error('Credential list exposed plaintext payload');
+    const [beforeAccessRows] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM v2_sensitive_access_logs WHERE tenant_id = ? AND credential_id = ?',
+      [actors[0].tenant_id, credential.id],
+    );
+    const contentAccess = await requestJson(baseUrl, token,
+      `/api/v2/credentials/${encodeURIComponent(credential.id)}/content-access`, {
+        method: 'POST', body: { purpose: 'local_demo' },
+      });
+    const [afterAccessRows] = await pool.execute(
+      'SELECT COUNT(*) AS total FROM v2_sensitive_access_logs WHERE tenant_id = ? AND credential_id = ?',
+      [actors[0].tenant_id, credential.id],
+    );
+    const accessAudited = Number(afterAccessRows[0].total) === Number(beforeAccessRows[0].total) + 1;
+    if (!contentAccess.credential?.proof?.proofValue || !accessAudited) throw new Error('Sensitive credential access was not fail-closed audited');
     let legacyDisabled = false;
     if (v2Only) {
       const legacyResponse = await fetch(`${baseUrl}/api/state`);
@@ -74,6 +89,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ authenticated: true, localSession: localSession.tenant?.name, issuerId: issuer.id, holderId: holder.id,
       credentialId: credential.id, credentialStatus: credential.status, sdJwtCreated: Boolean(presentation.sdJwt),
       fullVcVerified: credentialVerification.valid, sdJwtVerified: sdJwtVerification.valid,
+      listPlaintextProtected: true, sensitiveAccessAudited: accessAudited,
       verificationEvidenceCount: verificationLedger.total, credentialCount: list.total,
       dataMode: config.application.dataMode, legacyDisabled }, null, 2)}\n`);
   } finally {

@@ -28,6 +28,23 @@ test('admin seed is idempotent when all records already exist', async () => {
   const connection = new FakeConnection({ organization: { id: 'org-1' }, user: { id: 'user-1' }, membership: { id: 'membership-1' } });
   const result = await seedTenantAdmin(connection);
   assert.equal(connection.inserts.length, 0);
-  assert.equal(result.role, 'tenant_admin');
+  assert.deepEqual(result.roles, ['tenant_admin']);
   assert.deepEqual(connection.events, ['BEGIN', 'COMMIT']);
+});
+
+test('local demo seed grants sensitive reader separately from tenant administration', async () => {
+  const connection = new FakeConnection();
+  const ids = ['org-1', 'user-1', 'admin-membership', 'reader-membership'];
+  const result = await seedTenantAdmin(connection, { grantCredentialReader: true, createId: () => ids.shift() });
+  assert.deepEqual(result.roles, ['tenant_admin', 'credential_data_reader']);
+  assert.equal(connection.inserts.length, 4);
+  assert.match(connection.inserts.at(-1).sql, /role_code/);
+  assert.equal(connection.inserts.at(-1).params[3], 'credential_data_reader');
+});
+
+test('local demo operator roles are explicit and are not inherited from tenant admin', async () => {
+  const connection = new FakeConnection();
+  const ids = ['org-1', 'user-1', 'admin', 'issuer', 'holder', 'verifier'];
+  const result = await seedTenantAdmin(connection, { grantDemoOperatorRoles: true, createId: () => ids.shift() });
+  assert.deepEqual(result.roles, ['tenant_admin', 'issuer_operator', 'holder_operator', 'verifier_operator']);
 });

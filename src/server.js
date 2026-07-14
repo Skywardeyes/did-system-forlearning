@@ -24,7 +24,8 @@ const securityHeaders = {
 };
 
 export function sendJson(response, status, body) {
-  response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8' });
+  response.writeHead(status, { ...securityHeaders, 'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store', Pragma: 'no-cache' });
   response.end(JSON.stringify(body));
 }
 
@@ -170,13 +171,15 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export function createAppServer(activeService, { logService = noOpLogService, v2Api = null, legacyApiEnabled = true } = {}) { return createServer(async (request, response) => {
+export function createAppServer(activeService, { logService = noOpLogService, v2Api = null, legacyApiEnabled = true, requireHttps = false } = {}) { return createServer(async (request, response) => {
   const correlationId = randomUUID();
   const requestService = activeService?.withAuditContext
     ? activeService.withAuditContext(logService, correlationId)
     : activeService;
   const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
   try {
+    const secureRequest = Boolean(request.socket?.encrypted) || String(request.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
+    if (requireHttps && !secureRequest) return sendJson(response, 426, { error: 'HTTPS is required', code: 'HTTPS_REQUIRED' });
     if (v2Api && url.pathname.startsWith('/api/v2/')) {
       const result = await v2Api.handle(request, url, correlationId, readJson);
       sendJson(response, result.status, result.body);

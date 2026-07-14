@@ -10,6 +10,13 @@ test('credentialRows renders lifecycle actions', () => {
   assert.match(html, /data-revoke="vc-1"/);
 });
 
+test('credentialRows does not require or expose plaintext claims for protected V2 summaries', () => {
+  const html = credentialRows([{ id: 'vc-protected', status: 'active', issuedAt: '2026-01-01', contentProtected: true }], helpers);
+  assert.match(html, /受保护的凭证主体/);
+  assert.match(html, /授权查看/);
+  assert.doesNotMatch(html, /credentialSubject/);
+});
+
 test('verificationFailureNote renders readable reasons and fallbacks', () => {
   assert.equal(verificationFailureNote({ valid: true }), '全部检查通过');
   assert.match(verificationFailureNote({ valid: false, failedChecks: ['signature', 'credentialStatus'] }), /签名无效.*凭证状态不可用/);

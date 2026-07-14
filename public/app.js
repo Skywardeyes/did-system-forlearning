@@ -100,7 +100,11 @@ function renderDisclosureSelect() {
   const select = $('#disclosure-credential');
   const previous = select.value;
   const records = state.credentials.filter((item) => item.selectiveDisclosureAvailable && item.status === 'active');
-  select.innerHTML = `<option value="">请选择状态为 active 且支持选择性披露的凭证</option>${records.map((record) => `<option value="${escapeHtml(record.id)}">${escapeHtml(record.credential.credentialSubject.name)} · ${escapeHtml(record.credential.credentialSubject.course)} · ${escapeHtml(record.status)}</option>`).join('')}`;
+  select.innerHTML = `<option value="">请选择状态为 active 且支持选择性披露的凭证</option>${records.map((record) => {
+    const subject = record.credential?.credentialSubject;
+    const label = subject ? `${subject.name} · ${subject.course}` : `受保护凭证 ${short(record.id, 18)}`;
+    return `<option value="${escapeHtml(record.id)}">${escapeHtml(label)} · ${escapeHtml(record.status)}</option>`;
+  }).join('')}`;
   if (records.some((item) => item.id === previous)) select.value = previous;
   else if (records[0]) select.value = records[0].id;
 }
@@ -144,9 +148,14 @@ function renderCredentials() {
   }
   const rows = credentialRows(state.credentials, { escapeHtml, formatDate, short });
   tables.forEach((tbody) => { tbody.innerHTML = rows; });
-  $$('[data-open-vc]').forEach((button) => button.addEventListener('click', () => {
+  $$('[data-open-vc]').forEach((button) => button.addEventListener('click', async () => {
     const record = state.credentials.find((item) => item.id === button.dataset.openVc);
-    openJson('可验证凭证 VC', record.credential);
+    try {
+      const credential = record.credential || (await api(`/api/credentials/${encodeURIComponent(record.id)}/content-access`, {
+        method: 'POST', body: JSON.stringify({ purpose: 'holder_review' }),
+      })).credential;
+      openJson(record.credential ? '可验证凭证 VC' : '已授权查看 · 操作已审计', credential);
+    } catch (error) { toast(error.message, true); }
   }));
   $$('[data-revoke]').forEach((button) => button.addEventListener('click', () => revoke(button.dataset.revoke)));
   $$('[data-vc-action]').forEach((button) => button.addEventListener('click', () => credentialAction(button.dataset.id, button.dataset.vcAction)));
@@ -330,11 +339,16 @@ $('#verify-button').addEventListener('click', async () => {
   } catch (error) { toast(error instanceof SyntaxError ? 'VC JSON 格式无效' : error.message, true); }
 });
 
-$('#load-latest').addEventListener('click', () => {
-  const latest = state.credentials[0]?.credential;
+$('#load-latest').addEventListener('click', async () => {
+  const latest = state.credentials[0];
   if (!latest) return toast('当前没有可载入的凭证', true);
-  $('#verify-input').value = JSON.stringify(latest, null, 2);
-  toast('已载入最新凭证');
+  try {
+    const credential = latest.credential || (await api(`/api/credentials/${encodeURIComponent(latest.id)}/content-access`, {
+      method: 'POST', body: JSON.stringify({ purpose: 'verification_preparation' }),
+    })).credential;
+    $('#verify-input').value = JSON.stringify(credential, null, 2);
+    toast(latest.credential ? '已载入最新凭证' : '已授权载入，明文访问已审计');
+  } catch (error) { toast(error.message, true); }
 });
 
 $('#tamper-name').addEventListener('click', () => {

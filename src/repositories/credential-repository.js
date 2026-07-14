@@ -59,11 +59,15 @@ export class CredentialRepository {
     const [countRows] = await connection.execute(`SELECT COUNT(*) AS total FROM v2_credentials WHERE ${where}`, params);
     const pagination = sqlPagination(page, pageSize);
     const [rows] = await connection.execute(
-      `SELECT * FROM v2_credentials WHERE ${where} ORDER BY issued_at DESC, id DESC LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}`, params,
+      `SELECT id, tenant_id, issuer_did_id, holder_did_id, status, valid_from, valid_until, issued_at,
+              suspended_at, resumed_at, revoked_at, replaced_at, replaces_credential_id,
+              replaced_by_credential_id, row_version
+       FROM v2_credentials WHERE ${where}
+       ORDER BY issued_at DESC, id DESC LIMIT ${pagination.pageSize} OFFSET ${pagination.offset}`, params,
     );
     const total = Number(countRows[0].total);
     return { total, page: pagination.page, pageSize: pagination.pageSize,
-      totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)), items: rows.map((row) => this.mapRow(row)) };
+      totalPages: Math.max(1, Math.ceil(total / pagination.pageSize)), items: rows.map((row) => this.mapSummaryRow(row)) };
   }
 
   async saveLifecycle({ connection, context }, record, expectedRowVersion) {
@@ -83,13 +87,17 @@ export class CredentialRepository {
   }
 
   mapRow(row) {
+    return { ...this.mapSummaryRow(row), credential: this.decryptPayload(row) };
+  }
+
+  mapSummaryRow(row) {
     return {
       id: row.id, tenantId: row.tenant_id, issuerDidId: row.issuer_did_id, holderDidId: row.holder_did_id,
       status: row.status, validFrom: toIso(row.valid_from), validUntil: toIso(row.valid_until), issuedAt: toIso(row.issued_at),
       suspendedAt: row.suspended_at ? toIso(row.suspended_at) : null, resumedAt: row.resumed_at ? toIso(row.resumed_at) : null,
       revokedAt: row.revoked_at ? toIso(row.revoked_at) : null, replacedAt: row.replaced_at ? toIso(row.replaced_at) : null,
       replacesCredentialId: row.replaces_credential_id, replacedByCredentialId: row.replaced_by_credential_id,
-      credential: this.decryptPayload(row), rowVersion: Number(row.row_version),
+      rowVersion: Number(row.row_version),
     };
   }
 }

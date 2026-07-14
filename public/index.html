@@ -131,7 +131,7 @@
 
         <section class="view" id="view-disclosure">
           <div class="section-heading"><div><p>SELECTIVE DISCLOSURE</p><h2>选择性披露</h2></div></div>
-          <div class="note disclosure-note">可对比教学版摘要证明与 RFC 9901 核心 SD-JWT：两者均按需提交字段；SD-JWT 使用 Issuer-signed JWT 与标准 Disclosure 紧凑串。本系统尚未实现 SD-JWT Holder key binding 或 BBS+。</div>
+          <div class="note disclosure-note">凭证列表默认只显示非敏感元数据，不批量解密 VC。选择性披露由后端在受控边界内只释放选中字段；完整明文只能通过独立权限、明确用途和强制审计的操作读取。</div>
           <div class="verify-layout disclosure-layout">
             <section class="panel form-panel">
               <div class="section-heading"><div><p>CREATE PRESENTATION</p><h2>生成披露证明</h2></div></div>

@@ -8,6 +8,8 @@ import { sqlDate } from './repositories/sql-values.js';
 export async function seedTenantAdmin(connection, {
   organizationName = '本地演示组织',
   externalSubject = 'local-admin',
+  grantCredentialReader = false,
+  grantDemoOperatorRoles = false,
   now = new Date().toISOString(),
   createId = randomUUID,
 } = {}) {
@@ -37,22 +39,29 @@ export async function seedTenantAdmin(connection, {
       );
     }
 
-    const [membershipRows] = await connection.execute(
-      `SELECT id FROM v2_memberships
-       WHERE tenant_id = ? AND user_id = ? AND role_code = 'tenant_admin' FOR UPDATE`,
-      [organizationId, userId],
-    );
-    const membershipId = membershipRows[0]?.id || createId();
-    if (!membershipRows[0]) {
-      await connection.execute(
-        `INSERT INTO v2_memberships
-         (id, tenant_id, user_id, role_code, status, created_at, updated_at, row_version)
-         VALUES (?, ?, ?, 'tenant_admin', 'active', ?, ?, 1)`,
-        [membershipId, organizationId, userId, sqlDate(now), sqlDate(now)],
+    const roles = ['tenant_admin'];
+    if (grantCredentialReader) roles.push('credential_data_reader');
+    if (grantDemoOperatorRoles) roles.push('issuer_operator', 'holder_operator', 'verifier_operator');
+    const membershipIds = [];
+    for (const role of roles) {
+      const [membershipRows] = await connection.execute(
+        `SELECT id FROM v2_memberships
+         WHERE tenant_id = ? AND user_id = ? AND role_code = ? FOR UPDATE`,
+        [organizationId, userId, role],
       );
+      const membershipId = membershipRows[0]?.id || createId();
+      membershipIds.push(membershipId);
+      if (!membershipRows[0]) {
+        await connection.execute(
+          `INSERT INTO v2_memberships
+           (id, tenant_id, user_id, role_code, status, created_at, updated_at, row_version)
+           VALUES (?, ?, ?, ?, 'active', ?, ?, 1)`,
+          [membershipId, organizationId, userId, role, sqlDate(now), sqlDate(now)],
+        );
+      }
     }
     await connection.commit();
-    return { organizationId, userId, membershipId, organizationName, externalSubject, role: 'tenant_admin' };
+    return { organizationId, userId, membershipId: membershipIds[0], membershipIds, organizationName, externalSubject, roles };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -66,6 +75,8 @@ async function main() {
     const result = await seedTenantAdmin(connection, {
       organizationName: process.env.BOOTSTRAP_ORG_NAME || '本地演示组织',
       externalSubject: process.env.BOOTSTRAP_ADMIN_SUBJECT || 'local-admin',
+      grantCredentialReader: process.env.BOOTSTRAP_GRANT_CREDENTIAL_READER === 'true',
+      grantDemoOperatorRoles: process.env.BOOTSTRAP_GRANT_DEMO_ROLES === 'true',
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } finally {

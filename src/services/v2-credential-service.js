@@ -49,6 +49,17 @@ function toPublicRecord(record) {
   };
 }
 
+function toSummaryRecord(record) {
+  return {
+    id: record.id, status: record.status, issuerDidId: record.issuerDidId, holderDidId: record.holderDidId,
+    validFrom: record.validFrom, validUntil: record.validUntil, issuedAt: record.issuedAt,
+    suspendedAt: record.suspendedAt, resumedAt: record.resumedAt, revokedAt: record.revokedAt,
+    replacedAt: record.replacedAt, replacesCredentialId: record.replacesCredentialId,
+    replacedByCredentialId: record.replacedByCredentialId, rowVersion: record.rowVersion,
+    contentProtected: true, selectiveDisclosureAvailable: true, sdJwtAvailable: true,
+  };
+}
+
 export class V2CredentialService {
   constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, credentialStatusEventRepository, disclosureMaterialRepository, kms }) {
     this.unitOfWork = unitOfWork;
@@ -70,7 +81,7 @@ export class V2CredentialService {
     assertTenant(context);
     return this.unitOfWork.run(context, async (operation) => {
       const result = await this.credentialRepository.list(operation, query);
-      return { ...result, items: result.items.map(toPublicRecord) };
+      return { ...result, items: result.items.map(toSummaryRecord) };
     });
   }
 
@@ -93,7 +104,7 @@ export class V2CredentialService {
       };
       const saved = await this.credentialRepository.saveLifecycle(operation, next, current.rowVersion);
       await this.appendEvent(operation, saved.id, current.status, targetStatus, input.reason, at);
-      return toPublicRecord(saved);
+      return toSummaryRecord(saved);
     });
   }
 
@@ -118,7 +129,7 @@ export class V2CredentialService {
         ...previous, status: 'replaced', replacedAt: at, replacedByCredentialId: replacement.id,
       }, previous.rowVersion);
       await this.appendEvent(operation, replaced.id, previous.status, 'replaced', input.reason, at);
-      return { replaced: toPublicRecord(replaced), replacement: toPublicRecord(replacement) };
+      return { replaced: toSummaryRecord(replaced), replacement: toPublicRecord(replacement) };
     });
   }
 

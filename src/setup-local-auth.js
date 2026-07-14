@@ -12,6 +12,8 @@ export function ensureAuthSecret(envText, generatedSecret) {
     text = `${text}${separator}AUTH_JWT_HS256_SECRET=${generatedSecret}\n`; changed = true;
   }
   if (!/^AUTH_LOCAL_DEV_LOGIN=.+$/m.test(text)) { text = `${text}AUTH_LOCAL_DEV_LOGIN=true\n`; changed = true; }
+  if (!/^BOOTSTRAP_GRANT_CREDENTIAL_READER=.+$/m.test(text)) { text = `${text}BOOTSTRAP_GRANT_CREDENTIAL_READER=true\n`; changed = true; }
+  if (!/^BOOTSTRAP_GRANT_DEMO_ROLES=.+$/m.test(text)) { text = `${text}BOOTSTRAP_GRANT_DEMO_ROLES=true\n`; changed = true; }
   return { changed, text };
 }
 
