@@ -1,6 +1,7 @@
 import { createHmac } from 'node:crypto';
 import { bootstrap } from './bootstrap.js';
 import { loadRuntimeConfig } from './config.js';
+import { localDemoWalletIdentity } from './demo-wallet-identity.js';
 
 const encode = (value) => Buffer.from(JSON.stringify(value)).toString('base64url');
 function createAdminToken(secret, actorId, tenantId) {
@@ -48,7 +49,9 @@ async function main() {
     const token = localSession.accessToken || createAdminToken(config.auth.jwtHs256Secret, actors[0].actor_id, actors[0].tenant_id);
     const suffix = new Date().toISOString();
     const issuer = await requestJson(baseUrl, token, '/api/v2/dids', { method: 'POST', body: { name: `V2 冒烟签发方 ${suffix}`, role: 'issuer', method: 'example' } });
-    const holder = await requestJson(baseUrl, token, '/api/v2/dids', { method: 'POST', body: { name: `V2 冒烟持有方 ${suffix}`, role: 'holder', method: 'example' } });
+    const holder = await requestJson(baseUrl, token, '/api/v2/holder-dids/registration', { method: 'POST', body: {
+      name: `V2 冒烟钱包持有者 ${suffix}`, did: localDemoWalletIdentity.did, document: localDemoWalletIdentity.document,
+    } });
     const credential = await requestJson(baseUrl, token, '/api/v2/credentials', { method: 'POST', body: {
       issuerDid: issuer.did, holderDid: holder.did, subjectName: '本地冒烟学员', course: 'V2 生产数据链路',
       completionDate: new Date().toISOString().slice(0, 10), validUntil: new Date(Date.now() + 365 * 86_400_000).toISOString(),
@@ -56,6 +59,7 @@ async function main() {
     const presentation = await requestJson(baseUrl, token, `/api/v2/credentials/${encodeURIComponent(credential.id)}/sd-jwt`, {
       method: 'POST', body: { paths: ['credentialSubject.course'] },
     });
+    const walletPackage = await requestJson(baseUrl, token, `/api/v2/credentials/${encodeURIComponent(credential.id)}/wallet-package`, { method: 'POST', body: {} });
     const credentialVerification = await requestJson(baseUrl, token, '/api/v2/verify', {
       method: 'POST', body: { credential: credential.credential },
     });
@@ -89,6 +93,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify({ authenticated: true, localSession: localSession.tenant?.name, issuerId: issuer.id, holderId: holder.id,
       credentialId: credential.id, credentialStatus: credential.status, sdJwtCreated: Boolean(presentation.sdJwt),
       fullVcVerified: credentialVerification.valid, sdJwtVerified: sdJwtVerification.valid,
+      walletPackageCreated: walletPackage.format === 'wallet-vc-package-v1' && !JSON.stringify(walletPackage).includes('privateKey'),
       listPlaintextProtected: true, sensitiveAccessAudited: accessAudited,
       verificationEvidenceCount: verificationLedger.total, credentialCount: list.total,
       dataMode: config.application.dataMode, legacyDisabled }, null, 2)}\n`);

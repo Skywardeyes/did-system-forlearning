@@ -85,6 +85,26 @@ export class V2CredentialService {
     });
   }
 
+  async createWalletPackage(context, credentialId) {
+    assertTenant(context);
+    return this.unitOfWork.run(context, async (operation) => {
+      const record = await this.credentialRepository.findById(operation, credentialId);
+      if (!record) throw new RepositoryNotFoundError('Credential was not found in the current tenant');
+      const actualStatus = new Date(record.validUntil).getTime() <= Date.now() ? 'expired' : record.status;
+      if (actualStatus !== 'active') throw new Error(`Credential is ${actualStatus} and cannot be delivered to a wallet`);
+      const material = await this.disclosureMaterialRepository?.findByCredentialId(operation, credentialId);
+      const disclosures = material?.sdJwtMaterial?.disclosures;
+      if (!material?.sdJwtMaterial?.issuerJwt || !disclosures) throw new Error('Credential has no SD-JWT wallet delivery material');
+      return {
+        format: 'wallet-vc-package-v1', version: 1, createdAt: new Date().toISOString(), credentialId: record.id,
+        holderDid: record.credential.credentialSubject.id, issuerDid: record.credential.issuer,
+        credential: clone(record.credential),
+        sdJwt: { issuerJwt: material.sdJwtMaterial.issuerJwt,
+          disclosures: Object.fromEntries(Object.entries(disclosures).map(([path, entry]) => [path, entry.disclosure])) },
+      };
+    });
+  }
+
   async suspendCredential(context, credentialId, input = {}) { return this.transition(context, credentialId, 'suspended', input); }
   async resumeCredential(context, credentialId, input = {}) { return this.transition(context, credentialId, 'active', input); }
   async revokeCredential(context, credentialId, input = {}) { return this.transition(context, credentialId, 'revoked', input); }
@@ -186,7 +206,7 @@ export class V2CredentialService {
     const disclosures = Object.fromEntries(Object.entries(SD_JWT_CLAIMS).map(([path, claimName]) => [path,
       createSdJwtDisclosure(claimName, record.credential.credentialSubject[path.slice('credentialSubject.'.length)])]));
     const issuedSeconds = Math.floor(Date.parse(record.issuedAt) / 1000);
-    const payload = { iss: record.credential.issuer, jti: record.id, iat: issuedSeconds, nbf: issuedSeconds,
+    const payload = { iss: record.credential.issuer, sub: record.credential.credentialSubject.id, jti: record.id, iat: issuedSeconds, nbf: issuedSeconds,
       exp: Math.floor(Date.parse(record.validUntil) / 1000), vct: 'TrainingCompletionCredential', _sd_alg: 'sha-256', _sd: Object.values(disclosures).map((item) => item.digest) };
     const header = { alg: 'EdDSA', typ: 'vc+sd-jwt', kid: key.verificationMethod, keyVersion: key.version };
     const signingInput = `${base64UrlJson(header)}.${base64UrlJson(payload)}`;

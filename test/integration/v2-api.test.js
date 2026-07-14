@@ -44,3 +44,17 @@ test('tenant admin can review sensitive access metadata without receiving VC con
   assert.deepEqual(accessService.calls[0].roles, ['tenant_admin']);
   assert.equal(result.body.items[0].credential, undefined);
 });
+
+test('V2 API registers only public Holder DID Documents and delivers wallet packages through the Issuer route', async () => {
+  const accessService = new Access(); const calls = [];
+  const api = new V2Api({ authenticator: new Authenticator(), accessService,
+    didService: { async registerExternalHolderDid(current, body) { calls.push(['holder', current, body]); return { did: body.did, keyCustody: 'holder_self_custody' }; } },
+    credentialService: { async createWalletPackage(current, id) { calls.push(['package', current, id]); return { format: 'wallet-vc-package-v1', credentialId: id }; } }, disclosureService: {} });
+  const holder = await api.handle(request('POST'), new URL('http://local/api/v2/holder-dids/registration'), 'request-1', async () => ({ did: 'did:key:zholder', document: {} }));
+  assert.equal(holder.status, 201);
+  assert.deepEqual(accessService.calls[0].roles, ['issuer_operator']);
+  assert.equal(calls[0][2].did, 'did:key:zholder');
+  const delivery = await api.handle(request('POST'), new URL('http://local/api/v2/credentials/urn%3Auuid%3Avc-1/wallet-package'), 'request-2', async () => ({}));
+  assert.equal(delivery.body.format, 'wallet-vc-package-v1');
+  assert.equal(calls[1][2], 'urn:uuid:vc-1');
+});

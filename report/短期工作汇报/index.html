@@ -1,0 +1,200 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="DID/VC 项目短期工作汇报：生产级数据层、安全整改与 Vue 3 前后端分离">
+  <title>短期工作汇报｜DID/VC 生产化重构</title>
+  <style>
+    :root{--ink:#14202a;--muted:#68747b;--paper:#fff;--bg:#edf0f1;--line:#d7dddf;--blue:#1747d1;--lime:#c8ff38;--orange:#ff6b35;--red:#b42318;--green:#397300;--max:1180px}
+    *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:70px}body{margin:0;color:var(--ink);background:var(--bg);font-family:Inter,"Noto Sans SC","Microsoft YaHei",sans-serif;line-height:1.65}a{color:inherit}button{font:inherit}.progress{position:fixed;z-index:20;top:0;left:0;width:0;height:4px;background:var(--lime)}
+    .topbar{position:sticky;z-index:10;top:0;height:66px;display:flex;align-items:center;justify-content:space-between;padding:0 max(22px,calc((100vw - var(--max))/2));color:#fff;background:#14202af2;backdrop-filter:blur(12px);border-bottom:1px solid #ffffff22}.brand{display:flex;align-items:center;gap:10px;font-weight:900;letter-spacing:.06em}.brand i{width:25px;height:25px;display:grid;place-items:center;color:var(--ink);background:var(--lime);font-style:normal}.nav{display:flex;gap:4px}.nav a{padding:8px 10px;color:#bfc8cd;text-decoration:none;font-size:12px}.nav a:hover,.nav a.active{color:#fff;background:#ffffff12}.status-pill{padding:6px 9px;color:var(--lime);border:1px solid #c8ff3866;font-size:11px;font-weight:800}
+    .hero{min-height:calc(100vh - 66px);display:grid;align-content:center;padding:80px max(24px,calc((100vw - var(--max))/2));color:#fff;background:linear-gradient(130deg,#101a22 0 68%,#1747d1 68% 100%);position:relative;overflow:hidden}.hero:after{content:"V2";position:absolute;right:-2vw;bottom:-16vw;color:#ffffff0b;font-size:38vw;font-weight:950;line-height:1}.kicker,.eyebrow{color:var(--lime);font-size:11px;font-weight:900;letter-spacing:.18em}.hero h1{max-width:900px;margin:15px 0 22px;font-size:clamp(45px,7vw,92px);line-height:.98;letter-spacing:-.055em}.hero .lead{max-width:800px;margin:0;color:#c5ced3;font-size:clamp(17px,2vw,23px)}.hero-meta{position:relative;z-index:1;display:grid;grid-template-columns:repeat(4,1fr);gap:1px;margin-top:55px;background:#ffffff2b;border:1px solid #ffffff2b}.hero-meta div{padding:18px;background:#14202acc}.hero-meta strong,.hero-meta span{display:block}.hero-meta strong{color:var(--lime);font-size:24px}.hero-meta span{color:#aeb9bf;font-size:11px}.scroll-tip{position:absolute;bottom:24px;right:max(24px,calc((100vw - var(--max))/2));color:#d8dfe2;font-size:11px;letter-spacing:.15em;writing-mode:vertical-rl}
+    main{max-width:var(--max);margin:auto}.section{padding:100px 0;border-bottom:1px solid var(--line)}.section-head{display:grid;grid-template-columns:110px 1fr;gap:25px;margin-bottom:42px}.section-no{color:#cdd4d7;font-size:66px;font-weight:900;line-height:1}.section h2{margin:4px 0 13px;font-size:clamp(34px,5vw,62px);line-height:1.03;letter-spacing:-.045em}.section-intro{max-width:870px;margin:0;color:var(--muted);font-size:19px}.grid-2,.grid-3,.grid-4{display:grid;gap:17px}.grid-2{grid-template-columns:repeat(2,1fr)}.grid-3{grid-template-columns:repeat(3,1fr)}.grid-4{grid-template-columns:repeat(4,1fr)}.card{padding:25px;background:var(--paper);border:1px solid var(--line);box-shadow:0 10px 30px #14202a08}.card.accent{border-top:5px solid var(--blue)}.card.safe{border-top:5px solid var(--lime)}.card.warn{border-top:5px solid var(--orange)}.card h3{margin:0 0 10px;font-size:21px}.card p{margin:0;color:var(--muted)}.card ul{margin:12px 0 0;padding-left:19px;color:#4f5d65}.metric strong{display:block;color:var(--blue);font-size:42px;line-height:1.1}.metric span{color:var(--muted);font-size:12px}.callout{margin:24px 0;padding:22px 25px;color:#fff;background:var(--ink);border-left:7px solid var(--lime);font-size:18px}.callout strong{color:var(--lime)}
+    .timeline{position:relative;display:grid;gap:16px;margin-top:25px}.timeline:before{content:"";position:absolute;left:31px;top:20px;bottom:20px;width:2px;background:#bec8cc}.event{position:relative;display:grid;grid-template-columns:64px 150px 1fr;gap:18px;align-items:start;padding:20px 22px;background:#fff;border:1px solid var(--line)}.event-no{position:relative;z-index:1;width:22px;height:22px;margin:4px 0 0 20px;background:var(--blue);border:5px solid var(--bg);border-radius:50%}.event time{color:var(--blue);font-size:12px;font-weight:900}.event h3{margin:0 0 6px}.event p{margin:0;color:var(--muted)}.state{display:inline-block;margin-top:8px;padding:4px 7px;font-size:10px;font-weight:900}.state.done{color:#315d00;background:#eaffc1}.state.open{color:#784000;background:#fff0ca}
+    .architecture{padding:28px;background:#fff;border:1px solid var(--line)}.architecture-row{display:grid;grid-template-columns:170px 1fr;gap:18px;align-items:stretch}.architecture-row+ .architecture-row{margin-top:10px}.layer-label{display:grid;place-items:center;padding:16px;color:#fff;background:var(--ink);font-weight:900;text-align:center}.boxes{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.box{padding:14px;border:1px solid #cbd3d6;background:#f7f9f9}.box b,.box small{display:block}.box small{margin-top:5px;color:var(--muted)}.arrow-down{padding:7px 0 7px 185px;color:var(--blue);font-size:22px;font-weight:900}.flow{display:grid;grid-template-columns:repeat(5,1fr);gap:22px;margin:25px 0}.flow-step{position:relative;padding:18px;background:#fff;border-top:5px solid var(--blue)}.flow-step:not(:last-child):after{content:"→";position:absolute;top:38px;right:-18px;color:var(--blue);font-weight:900}.flow-step b{display:block;color:var(--blue);font-size:11px}.flow-step strong{display:block;margin:7px 0}.flow-step small{color:var(--muted)}
+    .table-wrap{overflow:auto;background:#fff;border:1px solid var(--line)}table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:13px 14px;border-bottom:1px solid #e0e5e7;text-align:left;vertical-align:top}th{color:#fff;background:var(--ink);font-size:11px;letter-spacing:.06em}td:first-child{font-weight:800}.yes{color:var(--green);font-weight:900}.no{color:var(--red);font-weight:900}.code{margin:22px 0;padding:19px 22px;overflow:auto;color:#d9e2e5;background:#10191f;border-left:5px solid var(--blue);font:13px/1.7 "Cascadia Code",Consolas,monospace}.code em{color:var(--lime);font-style:normal}.split-title{display:flex;align-items:end;justify-content:space-between;gap:15px;margin:45px 0 18px}.split-title h3{margin:0;font-size:27px}.split-title span{color:var(--muted);font-size:12px}
+    .evidence{display:grid;grid-template-columns:1.1fr 1fr;gap:18px}.test-board{padding:27px;background:var(--ink);color:#fff}.test-board h3{margin-top:0}.bars{display:grid;gap:15px}.bar-label{display:flex;justify-content:space-between;color:#cbd4d8;font-size:12px}.bar-track{height:10px;background:#ffffff18}.bar-fill{height:100%;background:var(--lime)}.test-list{display:grid;gap:10px}.test-item{display:grid;grid-template-columns:34px 1fr auto;align-items:center;gap:10px;padding:13px;background:#fff;border:1px solid var(--line)}.test-item i{width:25px;height:25px;display:grid;place-items:center;color:#315d00;background:#eaffc1;border-radius:50%;font-style:normal;font-weight:900}.test-item b{font-size:13px}.test-item span{color:var(--muted);font-size:11px}.risk{padding:20px;background:#fff7e8;border-left:5px solid var(--orange)}.risk h3{margin-top:0}.risk p{margin-bottom:0;color:#6b5b3e}.next{counter-reset:next;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}.next article{padding:22px;background:#fff;border:1px solid var(--line)}.next article:before{counter-increment:next;content:"0" counter(next);display:block;color:var(--blue);font-size:29px;font-weight:900}.next h3{margin:9px 0}.next p{margin:0;color:var(--muted)}
+    .closing{margin:90px 0;padding:55px;color:#fff;background:linear-gradient(120deg,var(--ink) 0 72%,var(--blue) 72%)}.closing h2{max-width:800px;margin:10px 0 18px;font-size:clamp(35px,5vw,61px);line-height:1.05}.closing p{max-width:760px;color:#c4ced2;font-size:18px}.closing .summary{display:grid;grid-template-columns:repeat(3,1fr);gap:1px;margin-top:35px;background:#ffffff22}.closing .summary div{padding:19px;background:#14202add}.closing strong{display:block;color:var(--lime);font-size:20px}.closing span{color:#aeb9bf;font-size:12px}.backtop{position:fixed;right:20px;bottom:20px;width:43px;height:43px;display:grid;place-items:center;color:#fff;background:var(--blue);text-decoration:none;font-weight:900}
+    @media(max-width:1220px){main{padding:0 24px}.topbar{padding:0 22px}.nav{display:none}.hero{padding-left:24px;padding-right:24px}}@media(max-width:850px){.hero-meta,.grid-4,.grid-3,.grid-2,.evidence,.next,.closing .summary{grid-template-columns:1fr 1fr}.section-head{grid-template-columns:1fr}.section-no{font-size:38px}.event{grid-template-columns:50px 1fr}.event time{grid-column:2}.event>div:last-child{grid-column:2}.architecture-row{grid-template-columns:1fr}.boxes{grid-template-columns:1fr 1fr}.arrow-down{padding-left:50%}.flow{grid-template-columns:1fr}.flow-step:not(:last-child):after{content:"↓";top:auto;right:50%;bottom:-21px}}@media(max-width:560px){.hero-meta,.grid-4,.grid-3,.grid-2,.evidence,.next,.closing .summary,.boxes{grid-template-columns:1fr}.hero{background:#14202a}.section{padding-top:70px}.section-intro{font-size:16px}.event{padding:15px}.closing{padding:34px 24px}.status-pill{display:none}}@media print{.topbar,.progress,.backtop,.scroll-tip{display:none}.hero{min-height:96vh}.section{break-before:page}.card,.architecture,.table-wrap{box-shadow:none}body{background:#fff}}
+  </style>
+</head>
+<body>
+  <div class="progress" id="progress"></div>
+  <header class="topbar">
+    <div class="brand"><i>信</i> DID / VC 短期工作汇报</div>
+    <nav class="nav" aria-label="章节导航">
+      <a href="#summary">总览</a><a href="#timeline">时间线</a><a href="#data">数据层</a><a href="#security">安全</a><a href="#vue">前后端</a><a href="#testing">验证</a><a href="#next">下一步</a>
+    </nav>
+    <span class="status-pill">2 COMMITTED · 1 IN PROGRESS</span>
+  </header>
+
+  <section class="hero" id="top">
+    <div class="kicker">SHORT-TERM ENGINEERING REPORT · 2026.07.13—2026.07.14</div>
+    <h1>从“能运行”走向<br>“可生产化”</h1>
+    <p class="lead">围绕 DID/VC 项目完成三次连续升级：生产级 MySQL V2 数据层、VC 明文访问安全整改、Vue 3 前后端分离。</p>
+    <div class="hero-meta">
+      <div><strong>ef61db6</strong><span>统计基线：远端合并提交</span></div>
+      <div><strong>2</strong><span>已完成正式 Git 提交</span></div>
+      <div><strong>V6</strong><span>当前数据库 Schema</span></div>
+      <div><strong>213/213</strong><span>Node 自动化测试通过</span></div>
+    </div>
+    <span class="scroll-tip">SCROLL TO REVIEW ↓</span>
+  </section>
+
+  <main>
+    <section class="section" id="summary">
+      <div class="section-head"><div class="section-no">00</div><div><div class="eyebrow">EXECUTIVE SUMMARY</div><h2>这一阶段完成了什么</h2><p class="section-intro">工作重点不是继续堆叠页面功能，而是补齐系统成为可信产品所需的数据边界、权限边界、审计能力和部署边界。</p></div></div>
+      <div class="grid-3">
+        <article class="card accent"><h3>数据层生产化</h3><p>将 DID、VC、密钥版本、状态事件、披露材料和审计记录统一迁入 MySQL V2，通过 Repository 与事务隔离业务和存储。</p></article>
+        <article class="card safe"><h3>安全边界收紧</h3><p>VC 列表默认不解密；完整正文必须经过独立权限、受控用途和强制审计，管理员不再天然拥有明文读取权。</p></article>
+        <article class="card warn"><h3>前后端正式拆分</h3><p>新建 Vue 3 + TypeScript 前端，Node 转为 API-only 服务，生产环境由 Nginx 统一提供 HTTPS 和同源代理。</p></article>
+      </div>
+      <div class="callout">核心变化：系统从“<strong>管理员打开页面就能看到所有内容</strong>”，转向“<strong>默认只见摘要，敏感读取必须有权限、有用途、有证据</strong>”。</div>
+      <div class="grid-4">
+        <div class="card metric"><strong>3,724+</strong><span>基线后已跟踪代码增量</span></div>
+        <div class="card metric"><strong>V2-only</strong><span>生产数据模式</span></div>
+        <div class="card metric"><strong>AES-256</strong><span>数据库静态加密</span></div>
+        <div class="card metric"><strong>Ed25519</strong><span>凭证签名与验证</span></div>
+      </div>
+    </section>
+
+    <section class="section" id="timeline">
+      <div class="section-head"><div class="section-no">01</div><div><div class="eyebrow">DELIVERY TIMELINE</div><h2>三段式工作时间线</h2><p class="section-intro">以 `ef61db6` 为起点，两个阶段已经提交，第三阶段已实现并验证、当前仍在工作区等待最终验收和提交。</p></div></div>
+      <div class="timeline">
+        <article class="event"><i class="event-no"></i><time>提交 4c838bf</time><div><h3>生产级数据层迁移</h3><p>引入 V2 Schema、Repository、Unit of Work、多租户、JWT、KMS、迁移前检查、V1→V2 迁移与对账工具。</p><span class="state done">已提交</span></div></article>
+        <article class="event"><i class="event-no"></i><time>提交 7243fd3</time><div><h3>凭证明文访问安全整改</h3><p>取消列表批量解密，拆分敏感读取角色，新增用途校验与 `v2_sensitive_access_logs`，实现审计失败不返回明文。</p><span class="state done">已提交</span></div></article>
+        <article class="event"><i class="event-no"></i><time>当前工作区</time><div><h3>Vue 3 前后端分离</h3><p>完成六个 Vue 页面、内存会话、API-only 开关、Nginx 配置、Vue 单元测试与真实浏览器端到端测试。</p><span class="state open">已验证，待提交</span></div></article>
+      </div>
+    </section>
+
+    <section class="section" id="data">
+      <div class="section-head"><div class="section-no">02</div><div><div class="eyebrow">DATA LAYER V2</div><h2>数据层从文件走向领域化数据库</h2><p class="section-intro">通过数据库迁移、仓储封装、事务和租户上下文，让“取数改数”不再散落在业务代码中，也不允许绕过安全边界。</p></div></div>
+      <div class="architecture" aria-label="V2 分层架构图">
+        <div class="architecture-row"><div class="layer-label">入口层</div><div class="boxes"><div class="box"><b>V2 API</b><small>HTTP 契约与错误映射</small></div><div class="box"><b>JWT Auth</b><small>身份、租户、角色</small></div><div class="box"><b>HTTPS Guard</b><small>生产传输约束</small></div><div class="box"><b>No-store</b><small>敏感响应不缓存</small></div></div></div>
+        <div class="arrow-down">↓</div>
+        <div class="architecture-row"><div class="layer-label">领域服务层</div><div class="boxes"><div class="box"><b>DID Service</b><small>创建、轮换、停用</small></div><div class="box"><b>VC Service</b><small>签发与生命周期</small></div><div class="box"><b>Disclosure</b><small>教学版与 SD-JWT</small></div><div class="box"><b>Verification</b><small>验签与证据记录</small></div></div></div>
+        <div class="arrow-down">↓</div>
+        <div class="architecture-row"><div class="layer-label">数据访问层</div><div class="boxes"><div class="box"><b>Repository</b><small>SQL 封装与租户过滤</small></div><div class="box"><b>Unit of Work</b><small>统一提交与回滚</small></div><div class="box"><b>KMS Boundary</b><small>私钥不离开边界</small></div><div class="box"><b>Optimistic Lock</b><small>版本冲突保护</small></div></div></div>
+        <div class="arrow-down">↓</div>
+        <div class="architecture-row"><div class="layer-label">持久化层</div><div class="boxes"><div class="box"><b>MySQL V6</b><small>结构化关系数据</small></div><div class="box"><b>AES-256-GCM</b><small>敏感字段认证加密</small></div><div class="box"><b>Status Events</b><small>生命周期只追加记录</small></div><div class="box"><b>Audit Logs</b><small>操作证据链</small></div></div></div>
+      </div>
+      <div class="split-title"><h3>渐进迁移而非“一刀切”</h3><span>降低既有数据与演示流程的迁移风险</span></div>
+      <div class="flow">
+        <div class="flow-step"><b>01</b><strong>Preflight</strong><small>检查 V1 引用和密钥完整性</small></div>
+        <div class="flow-step"><b>02</b><strong>Migrate</strong><small>将 V1 数据转换到 V2</small></div>
+        <div class="flow-step"><b>03</b><strong>Dual</strong><small>迁移期保留双模式</small></div>
+        <div class="flow-step"><b>04</b><strong>Reconcile</strong><small>数量和字段级对账</small></div>
+        <div class="flow-step"><b>05</b><strong>V2-only</strong><small>关闭旧接口并完成切换</small></div>
+      </div>
+    </section>
+
+    <section class="section" id="security">
+      <div class="section-head"><div class="section-no">03</div><div><div class="eyebrow">SECURITY REMEDIATION</div><h2>重新定义“管理员能看到什么”</h2><p class="section-intro">DID Document 中的公钥本来就应公开；真正需要保护的是私钥、VC 个人声明、披露盐和敏感访问轨迹。整改围绕最小权限和可追责展开。</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>对象</th><th>默认展示</th><th>保护方式</th><th>原因</th></tr></thead><tbody>
+        <tr><td>DID 与公钥</td><td class="yes">可以公开</td><td>DID Document 解析</td><td>验证方必须取得公钥才能验签</td></tr>
+        <tr><td>Holder DID 私钥</td><td class="no">禁止公开与上传</td><td>个人钱包 IndexedDB + 不可导出 Web Crypto CryptoKey</td><td>已自托管；平台仅登记公开 DID Document</td></tr>
+        <tr><td>VC 非敏感摘要</td><td class="yes">按权限展示</td><td>专用投影查询</td><td>支持状态、时间和生命周期管理</td></tr>
+        <tr><td>VC 完整正文</td><td class="no">默认隐藏</td><td>独立角色 + 用途 + 审计</td><td>含姓名、课程等个人声明</td></tr>
+        <tr><td>披露盐与材料</td><td class="no">禁止公开</td><td>加密存储</td><td>防止反推未披露声明</td></tr>
+      </tbody></table></div>
+      <div class="split-title"><h3>敏感正文读取证据链</h3><span>审计与读取位于同一事务</span></div>
+      <div class="flow">
+        <div class="flow-step"><b>01</b><strong>角色检查</strong><small>必须是 credential_data_reader</small></div>
+        <div class="flow-step"><b>02</b><strong>用途检查</strong><small>只接受固定用途枚举</small></div>
+        <div class="flow-step"><b>03</b><strong>单条解密</strong><small>不在列表中批量解密</small></div>
+        <div class="flow-step"><b>04</b><strong>写入台账</strong><small>记录人、证、用途、时间</small></div>
+        <div class="flow-step"><b>05</b><strong>返回明文</strong><small>审计失败则事务回滚</small></div>
+      </div>
+      <pre class="code">POST /api/v2/credentials/{id}/content-access
+Authorization: Bearer &lt;short-lived token&gt;
+Content-Type: application/json
+
+{ "purpose": <em>"verification_preparation"</em> }</pre>
+      <div class="grid-3">
+        <article class="card"><h3>职责分离</h3><p>`tenant_admin` 负责组织和审计，但不再自动拥有 Issuer、Holder、Verifier 或完整正文读取权限。</p></article>
+        <article class="card"><h3>失败关闭</h3><p>访问台账写入失败时，事务整体回滚；系统宁可不返回数据，也不产生无法追责的敏感访问。</p></article>
+        <article class="card"><h3>生产防误配</h3><p>强制 V2、HTTPS、数据库 TLS、关闭本地登录，并禁止 Node 在生产环境继续提供旧前端。</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="vue">
+      <div class="section-head"><div class="section-no">04</div><div><div class="eyebrow">FRONTEND SEPARATION</div><h2>Vue 3 前后端分离</h2><p class="section-intro">采用“同一仓库、两个工程、生产同源”的迁移方式：保留旧界面作为短期回退，新界面独立构建，后端逐步收敛为纯 API。</p></div></div>
+      <div class="architecture">
+        <div class="architecture-row"><div class="layer-label">浏览器</div><div class="boxes"><div class="box"><b>Vue 3</b><small>组件化页面</small></div><div class="box"><b>Router</b><small>六个业务路由</small></div><div class="box"><b>Pinia</b><small>仅保存非敏感摘要</small></div><div class="box"><b>Memory Token</b><small>不写浏览器存储</small></div></div></div>
+        <div class="arrow-down">↓ HTTPS / 同源</div>
+        <div class="architecture-row"><div class="layer-label">Web 层</div><div class="boxes"><div class="box"><b>Nginx</b><small>提供 Vue 静态资源</small></div><div class="box"><b>/api Proxy</b><small>转发到 Node</small></div><div class="box"><b>CSP</b><small>限制资源来源</small></div><div class="box"><b>TLS</b><small>统一传输保护</small></div></div></div>
+        <div class="arrow-down">↓</div>
+        <div class="architecture-row"><div class="layer-label">服务与数据</div><div class="boxes"><div class="box"><b>Node API-only</b><small>SERVE_FRONTEND=false</small></div><div class="box"><b>V2 Auth</b><small>租户与角色上下文</small></div><div class="box"><b>Issuer KMS</b><small>仅管理机构签名密钥</small></div><div class="box"><b>MySQL V6</b><small>加密持久化</small></div></div></div>
+      </div>
+      <div class="split-title"><h3>六个已迁移页面</h3><span>当前工作区，已完成构建和浏览器验证</span></div>
+      <div class="grid-3">
+        <article class="card"><h3>01 运行总览</h3><p>DID、VC、有效凭证和验证记录的非敏感统计。</p></article>
+        <article class="card"><h3>02 DID 身份</h3><p>创建、查看 Document、轮换密钥和停用身份。</p></article>
+        <article class="card"><h3>03 凭证签发</h3><p>签发 VC、查看受保护摘要并管理生命周期。</p></article>
+        <article class="card"><h3>04 凭证验证</h3><p>授权载入、完整验证和篡改检测，离页清空明文。</p></article>
+        <article class="card"><h3>05 选择性披露</h3><p>教学版摘要证明与 SD-JWT 两条路线。</p></article>
+        <article class="card"><h3>06 审计中心</h3><p>敏感访问、验证证据和系统日志集中查看。</p></article>
+      </div>
+      <div class="callout">前端安全原则：<strong>Token 只在模块内存，VC 明文只在当前组件内存，Pinia 和浏览器持久化存储都不保存敏感内容。</strong></div>
+    </section>
+
+    <section class="section" id="testing">
+      <div class="section-head"><div class="section-no">05</div><div><div class="eyebrow">VERIFICATION EVIDENCE</div><h2>不是“代码写完”，而是“证据闭环”</h2><p class="section-intro">测试覆盖算法、数据访问、领域规则、API、安全边界、数据库实链路与真实浏览器，重点验证失败场景和数据不泄露。</p></div></div>
+      <div class="evidence">
+        <div class="test-board"><h3>自动化验证结果</h3><div class="bars">
+          <div><div class="bar-label"><span>Node 自动化测试</span><b>213 / 213</b></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
+          <div><div class="bar-label"><span>Vue 单元测试</span><b>2 / 2</b></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
+          <div><div class="bar-label"><span>Vue Chromium E2E</span><b>2 / 2</b></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
+          <div><div class="bar-label"><span>旧 V2 界面回归</span><b>1 / 1</b></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
+        </div></div>
+        <div class="test-list">
+          <div class="test-item"><i>✓</i><b>MySQL Schema V6</b><span>健康</span></div>
+          <div class="test-item"><i>✓</i><b>V2-only 数据链路</b><span>通过</span></div>
+          <div class="test-item"><i>✓</i><b>VC 列表明文保护</b><span>通过</span></div>
+          <div class="test-item"><i>✓</i><b>敏感访问强制审计</b><span>通过</span></div>
+          <div class="test-item"><i>✓</i><b>完整 VC 与 SD-JWT 验证</b><span>通过</span></div>
+          <div class="test-item"><i>✓</i><b>Vue 离页清空敏感数据</b><span>通过</span></div>
+        </div>
+      </div>
+      <div class="split-title"><h3>重点验证的不是“成功路径”</h3><span>失败时也必须保持安全</span></div>
+      <div class="grid-3">
+        <article class="card"><h3>越权读取</h3><p>没有 `credential_data_reader` 时必须返回 403，租户管理员不能绕过权限查看正文。</p></article>
+        <article class="card"><h3>审计失败</h3><p>台账无法写入时不允许先返回明文，确保访问行为与证据记录原子一致。</p></article>
+        <article class="card"><h3>生命周期失效</h3><p>暂停或撤销的凭证不能继续生成披露证明，并在验证阶段明确失败。</p></article>
+      </div>
+    </section>
+
+    <section class="section" id="next">
+      <div class="section-head"><div class="section-no">06</div><div><div class="eyebrow">SELF-CUSTODY MVP</div><h2>答辩反馈已落地：Holder 私钥回到个人钱包</h2><p class="section-intro">当前 MVP 已把 Holder DID 的生成与出示签名移到独立钱包：浏览器 Web Crypto 生成不可导出私钥，平台只登记公开 DID Document，不能读取或代签 Holder 私钥。</p></div></div>
+      <div class="risk"><h3>已落地的边界与尚未夸大的部分</h3><p>机构 Issuer 私钥仍由 KMS 管理；钱包交付包只含 VC 与 Issuer 签名材料；最小披露由钱包本地签名并绑定 Challenge 和验证方域名。正式 DID Registry、跨设备恢复、Challenge 防重放台账和标准 SD-JWT Holder Binding 仍是下一阶段，绝不保存个人私钥、VC 明文或个人信息到链上。</p></div>
+      <div class="split-title"><h3>接下来三项工作</h3><span>按风险和迁移依赖排序</span></div>
+      <div class="next">
+        <article><h3>个人钱包 MVP（已完成）</h3><p>本地生成 Holder 私钥和 DID；私钥不上传，钱包本地保存 VC、选择字段并生成 Holder 签名的披露证明。</p></article>
+        <article><h3>签发、验证平台拆分</h3><p>Issuer 使用机构 HSM/KMS；Verifier 只验证最小披露并默认不留存完整 VC。</p></article>
+        <article><h3>DID 注册与信任治理</h3><p>抽象 DID Registry，先做本地/联盟账本适配，再锚定版本、状态和受信任机构目录。</p></article>
+      </div>
+    </section>
+
+    <section class="closing">
+      <div class="eyebrow">CONCLUSION</div><h2>这次重构的价值，不是换了数据库或框架</h2>
+      <p>真正的变化是：数据访问有边界、敏感操作有证据、生产配置会失败关闭、前后端可以独立演进。项目由“功能演示”向“可解释、可验证、可继续生产化”的系统迈进了一步。</p>
+      <div class="summary"><div><strong>数据可信</strong><span>Repository · Transaction · Tenant</span></div><div><strong>访问可控</strong><span>Role · Purpose · Audit</span></div><div><strong>架构可演进</strong><span>Vue 3 · API-only · Nginx</span></div></div>
+    </section>
+  </main>
+  <a class="backtop" href="#top" aria-label="返回顶部">↑</a>
+  <script>
+    const progress=document.querySelector('#progress');
+    const links=[...document.querySelectorAll('.nav a')];
+    const sections=links.map(link=>document.querySelector(link.getAttribute('href'))).filter(Boolean);
+    function update(){
+      const max=document.documentElement.scrollHeight-innerHeight;
+      progress.style.width=`${max>0?scrollY/max*100:0}%`;
+      let current=sections[0];
+      for(const section of sections)if(section.getBoundingClientRect().top<=100)current=section;
+      links.forEach(link=>link.classList.toggle('active',link.getAttribute('href')===`#${current?.id}`));
+    }
+    addEventListener('scroll',update,{passive:true});update();
+  </script>
+</body>
+</html>

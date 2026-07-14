@@ -112,6 +112,35 @@ export class V2VerificationService {
     });
   }
 
+  async verifyWalletPresentation(context, presentation) {
+    const sdJwtResult = await this.verifySdJwt(context, presentation?.sdJwt);
+    return this.unitOfWork.run(context, async (operation) => {
+      let payload = null;
+      try { payload = JSON.parse(Buffer.from(String(presentation?.sdJwt || '').split('~')[0].split('.')[1], 'base64url').toString('utf8')); } catch { /* reported below */ }
+      const holder = presentation?.holderDid && await this.didRepository.findByDid(operation, presentation.holderDid);
+      const holderProof = presentation?.holderProof;
+      const verificationMethod = holder?.document?.verificationMethod?.find((item) => item.id === holderProof?.verificationMethod);
+      const binding = {
+        type: 'WalletBoundSdJwtPresentation2026', sdJwt: presentation?.sdJwt, holderDid: presentation?.holderDid,
+        verificationMethod: holderProof?.verificationMethod, challenge: holderProof?.challenge, domain: holderProof?.domain,
+      };
+      let holderSignature = false;
+      try { holderSignature = Boolean(verificationMethod?.publicKeyJwk) && verifyPayload(binding, verificationMethod.publicKeyJwk, holderProof?.proofValue); } catch { holderSignature = false; }
+      const holderRegistered = Boolean(holder?.role === 'holder' && holder?.metadata?.keyCustody === 'holder_self_custody');
+      const holderMatchesSubject = Boolean(payload?.sub && payload.sub === presentation?.holderDid);
+      const challenge = typeof holderProof?.challenge === 'string' && holderProof.challenge.length >= 16
+        && holderProof.challenge === presentation?.challenge && holderProof.domain === presentation?.domain;
+      const checks = [
+        ...sdJwtResult.checks,
+        check('holderDid', 'Holder DID 登记', holderRegistered, holderRegistered ? '已解析个人钱包自托管 DID' : 'Holder DID 未登记或不是自托管身份'),
+        check('holderSubject', 'Holder 与凭证主体绑定', holderMatchesSubject, holderMatchesSubject ? 'SD-JWT sub 与 Holder DID 一致' : 'Holder DID 与凭证主体不一致'),
+        check('holderProof', 'Holder 本地签名绑定', holderSignature, holderSignature ? '由 Holder DID 私钥完成本次出示签名' : 'Holder 签名无效或验证方法不匹配'),
+        check('challenge', '验证方 Challenge 绑定', challenge, challenge ? 'Challenge 与验证方域名一致' : 'Challenge 或验证方域名无效'),
+      ];
+      return this.finish(operation, 'wallet-sd-jwt', payload?.jti || null, checks, sdJwtResult.disclosedPaths || [], { format: 'wallet-sd-jwt' });
+    });
+  }
+
   async finish(operation, kind, credentialId, checks, disclosedPaths, extra = {}) {
     const checkedAt = new Date().toISOString(); const valid = checks.every((item) => item.passed);
     await this.verificationLogRepository.append(operation, { id: randomUUID(), tenantId: operation.context.tenantId, credentialId,

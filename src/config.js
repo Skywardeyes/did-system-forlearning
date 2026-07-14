@@ -33,17 +33,19 @@ export function loadRuntimeConfig(env = process.env) {
   if (localDevLogin && !authSecret) throw new ConfigurationError('AUTH_LOCAL_DEV_LOGIN=true requires AUTH_JWT_HS256_SECRET');
   const production = String(env.NODE_ENV || '').trim().toLowerCase() === 'production';
   const requireHttps = String(env.REQUIRE_HTTPS || 'false').trim().toLowerCase() === 'true';
+  const serveFrontend = String(env.SERVE_FRONTEND || 'true').trim().toLowerCase() === 'true';
   if (production && localDevLogin) throw new ConfigurationError('Production mode forbids AUTH_LOCAL_DEV_LOGIN');
   if (production && dataMode !== 'v2') throw new ConfigurationError('Production mode requires APP_DATA_MODE=v2');
   if (production && !requireHttps) throw new ConfigurationError('Production mode requires REQUIRE_HTTPS=true');
   if (production && env.DB_SSL !== 'true') throw new ConfigurationError('Production mode requires DB_SSL=true');
+  if (production && serveFrontend) throw new ConfigurationError('Production mode requires SERVE_FRONTEND=false');
   return {
     database: {
       host, port, database, user, password, ssl: env.DB_SSL === 'true',
     },
     kms: { masterKey, activeKeyId: env.KMS_MASTER_KEY_ID || 'local-master-v1' },
     auth: { enabled: Boolean(authSecret), jwtHs256Secret: authSecret, localDevLogin },
-    application: { dataMode },
+    application: { dataMode, serveFrontend },
     security: { requireHttps, production },
   };
 }

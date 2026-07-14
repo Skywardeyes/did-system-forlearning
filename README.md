@@ -4,7 +4,7 @@
 
 > 创建 DID → 签发 VC → 完整验证 → 选择性披露 → 篡改检测 → 生命周期失效
 
-系统使用 Node.js 内置 Ed25519 加密能力，无第三方运行依赖，无需联网、数据库或区块链。
+系统使用 Node.js、MySQL、Ed25519、AES-256-GCM 和 V2 认证授权模型；新界面采用 Vue 3 + TypeScript + Vite，并按生产同源反向代理方式实现前后端分离。
 
 ## 快速开始
 
@@ -12,15 +12,19 @@
 
 ```bash
 npm start
+npm run frontend:dev
+npm run wallet:dev
 ```
 
-浏览器访问：<http://127.0.0.1:4173>
+机构侧 Vue 界面访问：<http://127.0.0.1:5173>；个人钱包访问：<http://127.0.0.1:5176>。旧 `public/` 界面在迁移验收完成前保留为回退入口。
 
-首次使用可点击左下角“重置并载入演示数据”，系统会创建一个 Issuer DID、一个 Holder DID，并签发一张结业 VC。
+本地演示重置会创建机构 Issuer DID，并登记一个仅含公钥的外部钱包 Holder DID；服务端不会保存该 Holder 的私钥。
 
 ## 功能清单
 
-- 创建 Issuer 和 Holder 的 `did:example` 或 `did:key` 身份
+- 签发机构创建并由 KMS 管理 Issuer DID；Holder 在独立钱包本地创建 `did:key`
+- 签发平台只登记 Holder 的公开 DID Document，不创建、不保存 Holder 私钥
+- 钱包本地保存 VC 交付包、选择字段并生成带 Holder 本地签名的最小披露证明
 - `did:example` 支持更新、密钥轮换和不可逆停用；`did:key` 明确禁用这三类操作
 - 查看包含验证方法、公钥、认证和断言方法的 DID Document
 - 使用 Issuer 的 Ed25519 私钥签发培训结业 VC
@@ -35,17 +39,18 @@ npm start
 - 支持 RFC 9901 核心 SD-JWT：Issuer-signed JWT、`_sd` 摘要和按需 Disclosure 紧凑串
 - 只公开选中的姓名、课程、完成日期或完成状态，未公开字段原值和盐不进入披露证明
 - 验证披露证明并保存可搜索、分页、带中文失败原因的独立验证台账
-- 私钥仅保存在本地 `data/store.json`，不会通过普通 API 返回
+- Issuer 私钥经加密后由机构 KMS 使用；Holder 私钥仅在个人钱包 IndexedDB 中以不可导出 `CryptoKey` 保存，不上传平台
 - 独立日志中心记录操作审计与系统运行的成功、失败和异常
 - 日志支持组合筛选、10/20/50 分页、脱敏详情和 5,000 条留存上限
 - INFO/WARN/ERROR 分别使用绿色、黄色、红色并同时显示文字
 
 ## 演示流程
 
-1. 启动应用并载入演示数据。
-2. 在“DID 身份”查看 Issuer、Holder 和 DID Document。
-3. 在“凭证签发”查看已生成的 VC，或重新填写信息签发；页面底部的凭证台账可查看和管理全部历史 VC。
-4. 在“凭证验证”载入最新凭证，执行验证，确认七项全部通过；页面底部的验证记录台账会记录结果及失败原因。
+1. 启动机构侧应用与个人钱包；在钱包中本地创建 Holder DID，复制公开登记包。
+2. 在机构侧“DID 身份”登记该公开 DID；平台只显示公钥与 DID Document。
+3. 在“凭证签发”选择已登记的 Holder DID 并签发 VC，生成“钱包交付包”。
+4. 将交付包导入个人钱包，在钱包中选择字段并生成本地签名的最小披露证明。
+5. 在“钱包验证”粘贴钱包证明，验证 Issuer 签名、VC 状态、Holder DID 和 Holder 本地签名。
 5. 点击“模拟篡改姓名”，再次验证，观察 Ed25519 签名失败。
 6. 返回总览，在凭证台账撤销原始 VC。
 7. 重新载入该 VC 并验证，观察撤销状态失败。
@@ -64,24 +69,26 @@ npm test
 ## 项目结构
 
 ```text
-public/                 Web 演示操作台
+frontend/               Vue 3 + TypeScript 独立前端工程
+public/                 迁移期保留的旧 Web 操作台
 public/log-ui.js        日志筛选状态、级别标识和安全渲染
 src/crypto.js           did:key、稳定序列化、Ed25519 签名与验签
 src/log-store.js        独立日志文件原子存储与留存上限
 src/log-service.js      结构化日志、递归脱敏、查询与清空摘要
-src/store.js            JSON 本地存储及私钥脱敏
-src/vc-service.js       DID/VC 业务规则
-src/server.js           HTTP API 与静态资源服务
+src/repositories/       与业务逻辑隔离的 MySQL 数据访问层
+src/services/           V2 DID、VC、披露、验证与敏感访问服务
+src/server.js           Node HTTP API 服务
+deploy/                 Nginx 生产同源反向代理示例
 test/                   自动化验收测试
 docs/                   范围、方案、测试验收和交付材料
-data/store.json         本地运行数据（已被 Git 忽略）
+database/               MySQL 迁移脚本与 V6 Schema
 ```
 
 ## 实现边界
 
 本系统参考 W3C DID Core 与 VC Data Model 2.0 的核心数据结构，实现教学演示版 DID、VC 和 proof。`did:key` 的 Ed25519 公钥指纹采用 multicodec 前缀和 base58btc 编码；完整 VC proof 使用稳定键序 JSON 和 Ed25519 签名。选择性披露使用加盐 SHA-256 声明摘要与 Ed25519 摘要清单签名。
 
-完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统同时实现 RFC 9901 的 SD-JWT 核心格式：Issuer 使用 EdDSA 签发 JWT，Holder 可携带选中的 Disclosure；该实现尚未包含 SD-JWT VC 应用配置、Holder key binding、钱包本地保管或跨机构状态服务。系统不提供生产级密钥托管、真实身份核验、链上注册或标准状态列表。
+完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统实现 RFC 9901 核心 SD-JWT，并增加课程 MVP 的 `WalletBoundSdJwtPresentation2026`：钱包本地选择 Disclosure，并以 Holder Ed25519 私钥绑定 Challenge 和验证方域名。它不是正式 SD-JWT Holder Key Binding 规范实现；Challenge 防重放台账、跨机构 DID 注册网络、链上状态列表和正式身份核验仍属于下一阶段。
 
 ## 配置
 

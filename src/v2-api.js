@@ -6,6 +6,7 @@ const roles = Object.freeze({
   reader: ['tenant_admin', 'issuer_operator', 'holder_operator', 'verifier_operator'],
   sensitiveReader: ['credential_data_reader'],
 });
+import { localDemoWalletIdentity } from './demo-wallet-identity.js';
 
 export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
@@ -58,6 +59,10 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.administrator);
       return { status: 201, body: await this.didService.createDid(context, await readJson(request)) };
     }
+    if (request.method === 'POST' && url.pathname === '/api/v2/holder-dids/registration') {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 201, body: await this.didService.registerExternalHolderDid(context, await readJson(request)) };
+    }
     if (request.method === 'GET' && url.pathname === '/api/v2/credentials') {
       await this.accessService.requireAnyRole(context, roles.reader);
       return { status: 200, body: await this.credentialService.listCredentials(context, query) };
@@ -81,6 +86,10 @@ export class V2Api {
     if (request.method === 'POST' && url.pathname === '/api/v2/sd-jwt/verify') {
       await this.accessService.requireAnyRole(context, roles.verifier);
       return { status: 200, body: await this.verificationService.verifySdJwt(context, (await readJson(request)).sdJwt) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-presentations/verify') {
+      await this.accessService.requireAnyRole(context, roles.verifier);
+      return { status: 200, body: await this.verificationService.verifyWalletPresentation(context, (await readJson(request)).presentation) };
     }
     if (request.method === 'GET' && url.pathname === '/api/v2/verification-logs') {
       await this.accessService.requireAnyRole(context, roles.reader);
@@ -122,7 +131,8 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.administrator);
       const suffix = new Date().toISOString();
       const issuer = await this.didService.createDid(context, { name: `演示签发方 ${suffix}`, role: 'issuer', method: 'example' });
-      const holder = await this.didService.createDid(context, { name: `演示持有方 ${suffix}`, role: 'holder', method: 'example' });
+      const holder = await this.didService.registerExternalHolderDid(context, { name: `演示钱包持有者 ${suffix}`,
+        did: localDemoWalletIdentity.did, document: localDemoWalletIdentity.document });
       const credential = await this.credentialService.issueCredential(context, { issuerDid: issuer.did, holderDid: holder.did,
         subjectName: '演示学员', course: 'DID 与 VC 生产链路', completionDate: new Date().toISOString().slice(0, 10),
         validUntil: new Date(Date.now() + 365 * 86_400_000).toISOString() });
@@ -135,6 +145,11 @@ export class V2Api {
       return { status: 200, body: await this.credentialAccessService.readPlaintext(
         context, decodeURIComponent(contentAccess[1]), body.purpose,
       ) };
+    }
+    const walletPackage = url.pathname.match(/^\/api\/v2\/credentials\/([^/]+)\/wallet-package$/);
+    if (request.method === 'POST' && walletPackage) {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 200, body: await this.credentialService.createWalletPackage(context, decodeURIComponent(walletPackage[1])) };
     }
     const disclose = url.pathname.match(/^\/api\/v2\/credentials\/([^/]+)\/(disclosures|sd-jwt)$/);
     if (request.method === 'POST' && disclose) {

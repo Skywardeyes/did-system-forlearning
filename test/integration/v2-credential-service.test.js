@@ -23,6 +23,7 @@ class CredentialRepository {
   constructor() { this.records = new Map(); }
   async create(_operation, record) { const saved = { ...structuredClone(record), rowVersion: 1 }; this.records.set(saved.id, saved); return saved; }
   async getForUpdate(_operation, id) { return structuredClone(this.records.get(id) || null); }
+  async findById(_operation, id) { return structuredClone(this.records.get(id) || null); }
   async saveLifecycle(_operation, record, expectedRowVersion) {
     const current = this.records.get(record.id); assert.equal(current.rowVersion, expectedRowVersion);
     const saved = { ...structuredClone(record), rowVersion: expectedRowVersion + 1 }; this.records.set(record.id, saved); return saved;
@@ -30,18 +31,23 @@ class CredentialRepository {
   async list() { return { total: this.records.size, items: [...this.records.values()].map(structuredClone) }; }
 }
 class EventRepository { constructor() { this.events = []; } async append(_operation, event) { this.events.push(structuredClone(event)); return event; } }
-class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payload }) { this.calls.push({ keyId, payload: structuredClone(payload) }); return 'signature-from-kms'; } }
+class DisclosureMaterialRepository {
+  constructor() { this.records = new Map(); }
+  async upsert(_operation, material) { this.records.set(material.credentialId, structuredClone(material)); return material; }
+  async findByCredentialId(_operation, id) { return structuredClone(this.records.get(id) || null); }
+}
+class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payload }) { this.calls.push({ keyId, payload: structuredClone(payload) }); return 'signature-from-kms'; } async signBytes() { return 'jwt-signature-from-kms'; } }
 
 function createService() {
   const dids = [
     { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1 },
     { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1 },
   ];
-  const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms();
+  const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms(); const materials = new DisclosureMaterialRepository();
   return {
     service: new V2CredentialService({ unitOfWork: new UnitOfWork(), didRepository: new DidRepository(dids),
-      didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, kms }),
-    credentialRepository, events, kms,
+      didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, disclosureMaterialRepository: materials, kms }),
+    credentialRepository, events, kms, materials,
   };
 }
 
@@ -82,4 +88,17 @@ test('V2 replacement links old and new credentials within one unit of work', asy
   assert.equal(result.replacement.status, 'active');
   assert.equal(result.replaced.replacedByCredentialId, result.replacement.id);
   assert.equal(result.replacement.replacesCredentialId, issued.id);
+});
+
+test('V2 issuer can create a holder wallet delivery package without any Holder private key', async () => {
+  const { service } = createService();
+  const issued = await service.issueCredential(context, issueInput());
+  const walletPackage = await service.createWalletPackage(context, issued.id);
+  assert.equal(walletPackage.format, 'wallet-vc-package-v1');
+  assert.equal(walletPackage.holderDid, 'did:example:holder');
+  assert.equal(walletPackage.credential.credentialSubject.id, walletPackage.holderDid);
+  assert.ok(walletPackage.sdJwt.disclosures['credentialSubject.course']);
+  const payload = JSON.parse(Buffer.from(walletPackage.sdJwt.issuerJwt.split('.')[1], 'base64url').toString('utf8'));
+  assert.equal(payload.sub, walletPackage.holderDid);
+  assert.equal(JSON.stringify(walletPackage).includes('privateJwk'), false);
 });

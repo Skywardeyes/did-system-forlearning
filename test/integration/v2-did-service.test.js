@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { V2DidService } from '../../src/services/v2-did-service.js';
+import { localDemoWalletIdentity } from '../../src/demo-wallet-identity.js';
 
 const context = { tenantId: 'tenant-1', actorId: 'user-1', requestId: 'request-1' };
 const publicJwk = (seed) => ({ kty: 'OKP', crv: 'Ed25519', x: Buffer.alloc(32, seed).toString('base64url') });
@@ -13,6 +14,7 @@ class InMemoryDidRepository {
   constructor() { this.records = new Map(); }
   async create(_operation, did) { this.records.set(did.id, { ...structuredClone(did), rowVersion: 1 }); return did; }
   async getForUpdate(_operation, id) { return structuredClone(this.records.get(id) || null); }
+  async findByDid(_operation, value) { return structuredClone([...this.records.values()].find((record) => record.did === value) || null); }
   async save(_operation, did, expectedRowVersion) {
     const current = this.records.get(did.id);
     assert.equal(current.rowVersion, expectedRowVersion);
@@ -70,15 +72,22 @@ test('V2 DID service rotates an example DID key in one logical operation', async
   assert.equal(didRepository.records.get(created.id).rowVersion, 2);
 });
 
-test('V2 DID service deactivates an example DID and rejects mutation of did:key', async () => {
+test('V2 DID service deactivates an example Issuer DID and requires Holder DID self-custody', async () => {
   const { service, kms } = createService();
   const example = await service.createDid(context, { name: 'Issuer', role: 'issuer' });
   const deactivated = await service.deactivateDid(context, example.id, { expectedVersion: 1 });
   assert.equal(deactivated.status, 'deactivated');
   assert.equal(kms.retired.length, 1);
 
-  const key = await service.createDid(context, { name: 'Holder', role: 'holder', method: 'key' });
-  assert.match(key.did, /^did:key:z/);
-  await assert.rejects(() => service.updateDid(context, key.id, { expectedVersion: 1, name: 'Changed' }), /did:key/);
-  await assert.rejects(() => service.rotateDidKey(context, key.id, { expectedVersion: 1 }), /did:key/);
+  await assert.rejects(() => service.createDid(context, { name: 'Holder', role: 'holder', method: 'key' }), /personal wallet/);
+});
+
+test('V2 DID service registers a public self-custody Holder DID without generating or storing its private key', async () => {
+  const { service, didRepository, didKeyVersionRepository, kms } = createService();
+  const holder = await service.registerExternalHolderDid(context, { name: 'Wallet', ...localDemoWalletIdentity });
+  assert.equal(holder.did, localDemoWalletIdentity.did);
+  assert.equal(holder.keyCustody, 'holder_self_custody');
+  assert.equal(didRepository.records.size, 1);
+  assert.equal(didKeyVersionRepository.records.size, 0);
+  assert.equal(kms.counter, 0);
 });

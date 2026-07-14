@@ -25,6 +25,7 @@ test('returns typed database and kms configuration', () => {
   assert.equal(config.auth.enabled, false);
   assert.equal(config.auth.localDevLogin, false);
   assert.equal(config.application.dataMode, 'dual');
+  assert.equal(config.application.serveFrontend, true);
   assert.equal(config.security.requireHttps, false);
 });
 
@@ -35,10 +36,17 @@ test('production mode requires V2, TLS, database TLS and forbids local login', (
   assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
     REQUIRE_HTTPS: 'true' })), /DB_SSL/);
   assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
-    REQUIRE_HTTPS: 'true', DB_SSL: 'true', AUTH_LOCAL_DEV_LOGIN: 'true' })), /forbids/);
+    REQUIRE_HTTPS: 'true', DB_SSL: 'true', SERVE_FRONTEND: 'false', AUTH_LOCAL_DEV_LOGIN: 'true' })), /forbids/);
   const config = loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
-    REQUIRE_HTTPS: 'true', DB_SSL: 'true' }));
+    REQUIRE_HTTPS: 'true', DB_SSL: 'true', SERVE_FRONTEND: 'false' }));
   assert.equal(config.security.production, true);
+  assert.equal(config.application.serveFrontend, false);
+});
+
+test('production mode requires the frontend to be served by a separate web tier', () => {
+  const secret = Buffer.alloc(32, 8).toString('base64');
+  assert.throws(() => loadRuntimeConfig(validEnv({ NODE_ENV: 'production', APP_DATA_MODE: 'v2', AUTH_JWT_HS256_SECRET: secret,
+    REQUIRE_HTTPS: 'true', DB_SSL: 'true', SERVE_FRONTEND: 'true' })), /SERVE_FRONTEND=false/);
 });
 
 test('local development login is explicit and requires a JWT secret', () => {

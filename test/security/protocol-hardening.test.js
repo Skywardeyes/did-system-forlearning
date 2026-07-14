@@ -30,6 +30,19 @@ test('HTTPS enforcement rejects plaintext requests when production guard is enab
   assert.equal((await response.json()).code, 'HTTPS_REQUIRED');
 });
 
+test('API-only mode refuses legacy frontend files but keeps health and APIs reachable', async (t) => {
+  const fixture = await createFixture(t);
+  const server = createAppServer(fixture.service, { logService: fixture.logService, serveFrontend: false });
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => new Promise((resolve) => server.close(resolve)));
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const frontend = await fetch(`${base}/`);
+  assert.equal(frontend.status, 404);
+  assert.equal((await frontend.json()).code, 'FRONTEND_EXTERNAL');
+  assert.equal((await (await fetch(`${base}/health`)).json()).frontend, 'external');
+  assert.equal((await fetch(`${base}/api/state`)).status, 200);
+});
+
 test('dangerous unsupported methods cannot change application state', async (t) => {
   const app = await startTestApp(t);
   const before = await (await fetch(`${app.url}/api/state`)).json();

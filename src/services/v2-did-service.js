@@ -41,6 +41,24 @@ function buildDocument(did, publicJwk, version, method, serviceEndpoint = null) 
   return { document, verificationMethod };
 }
 
+function assertSelfCustodyDocument(input) {
+  const did = String(input?.did || '').trim();
+  const document = input?.document;
+  const method = did.startsWith('did:key:') ? 'key' : null;
+  const verificationMethod = document?.verificationMethod?.[0];
+  const publicJwk = verificationMethod?.publicKeyJwk;
+  const expectedFingerprint = publicJwk?.kty === 'OKP' && publicJwk?.crv === 'Ed25519' && typeof publicJwk?.x === 'string'
+    ? didKeyFingerprint(publicJwk) : null;
+  const expectedMethod = expectedFingerprint ? `${did}#${expectedFingerprint}` : null;
+  if (!method || document?.id !== did || !expectedFingerprint || did !== `did:key:${expectedFingerprint}`
+    || verificationMethod?.id !== expectedMethod || verificationMethod?.controller !== did
+    || !Array.isArray(document?.authentication) || !document.authentication.includes(expectedMethod)
+    || !Array.isArray(document?.assertionMethod) || !document.assertionMethod.includes(expectedMethod)) {
+    throw new Error('Holder DID Document must be a valid self-custody did:key Ed25519 document');
+  }
+  return { did, method, document: clone(document) };
+}
+
 function publicDid(did) {
   const metadata = did.metadata || {};
   return {
@@ -55,6 +73,7 @@ function publicDid(did) {
     serviceEndpoint: metadata.serviceEndpoint || null,
     deactivatedAt: metadata.deactivatedAt || null,
     capabilities: clone(CAPABILITIES[did.method]),
+    keyCustody: metadata.keyCustody || 'legacy_demo_custody',
     document: clone(did.document),
     publicJwk: clone(did.document.verificationMethod?.[0]?.publicKeyJwk || null),
     createdAt: did.createdAt,
@@ -75,7 +94,7 @@ export class V2DidService {
     const role = input?.role;
     const method = input?.method || 'example';
     if (!name) throw new Error('名称不能为空');
-    if (!['issuer', 'holder'].includes(role)) throw new Error('角色必须是 issuer 或 holder');
+    if (role !== 'issuer') throw new Error('Holder DID must be created in the personal wallet and registered with its public DID Document');
     if (!CAPABILITIES[method]) throw new Error('不支持的 DID Method');
 
     return this.unitOfWork.run(context, async (operation) => {
@@ -87,7 +106,7 @@ export class V2DidService {
       const { document, verificationMethod } = buildDocument(did, keyMaterial.publicJwk, 1, method);
       const identity = {
         id: randomUUID(), tenantId: context.tenantId, did, method, role, status: 'active', version: 1, keyVersion: 1,
-        document, metadata: { name, serviceEndpoint: null, deactivatedAt: null }, createdAt, updatedAt: createdAt,
+        document, metadata: { name, serviceEndpoint: null, deactivatedAt: null, keyCustody: 'issuer_managed_kms' }, createdAt, updatedAt: createdAt,
       };
       await this.didRepository.create(operation, identity);
       const persistedKey = await this.kms.persistSigningKey({ connection: operation.connection, did, version: 1, keyMaterial, createdAt });
@@ -95,6 +114,28 @@ export class V2DidService {
         id: randomUUID(), didId: identity.id, version: 1, kmsKeyId: persistedKey.keyId, verificationMethod,
         publicJwk: persistedKey.publicJwk, status: 'active', createdAt, retiredAt: null,
       });
+      return publicDid(identity);
+    });
+  }
+
+  async registerExternalHolderDid(context, input) {
+    const name = String(input?.name || '外部 Holder 钱包').trim();
+    if (!name) throw new Error('Holder name is required');
+    const selfCustody = assertSelfCustodyDocument(input);
+    return this.unitOfWork.run(context, async (operation) => {
+      const existing = await this.didRepository.findByDid(operation, selfCustody.did);
+      if (existing) {
+        if (existing.role !== 'holder' || existing.metadata?.keyCustody !== 'holder_self_custody') throw new Error('The DID is already registered with an incompatible role');
+        return publicDid(existing);
+      }
+      const createdAt = new Date().toISOString();
+      const identity = {
+        id: randomUUID(), tenantId: context.tenantId, did: selfCustody.did, method: selfCustody.method, role: 'holder',
+        status: 'active', version: 1, keyVersion: 1, document: selfCustody.document,
+        metadata: { name, serviceEndpoint: null, deactivatedAt: null, keyCustody: 'holder_self_custody', registrationSource: 'wallet' },
+        createdAt, updatedAt: createdAt,
+      };
+      await this.didRepository.create(operation, identity);
       return publicDid(identity);
     });
   }

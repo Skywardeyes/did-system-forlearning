@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="description" content="DID/VC 个人钱包：本地生成和保存 Holder 私钥，不上传平台。">
+  <title>信证钱包｜个人 DID</title>
+  <style>
+    :root{font-family:Inter,"Microsoft YaHei",sans-serif;color:#17212a;background:#edf1f1;--blue:#1747d1;--ink:#17212a;--lime:#c8ff38;--line:#d4dbde;--muted:#627079}*{box-sizing:border-box}body{margin:0}.top{padding:24px max(24px,calc((100vw - 1100px)/2));color:#fff;background:linear-gradient(120deg,#17212a 0 70%,#1747d1 70%)}.top h1{margin:8px 0;font-size:clamp(32px,5vw,58px)}.top p{max-width:720px;color:#d0d9dd}.badge{display:inline-block;padding:5px 8px;color:#17212a;background:var(--lime);font-size:11px;font-weight:800}.layout{max-width:1100px;margin:0 auto;padding:28px 24px 60px;display:grid;grid-template-columns:1fr 1fr;gap:18px}.card{padding:22px;background:#fff;border:1px solid var(--line);box-shadow:0 8px 20px #17212a0a}.card.wide{grid-column:1/-1}.card h2{margin:0 0 10px;font-size:21px}.card p,.hint{color:var(--muted);font-size:13px;line-height:1.7}.warning{padding:14px;background:#f3f8e9;border-left:5px solid #7ba72b;color:#40531d;font-size:13px}.danger{padding:14px;background:#fff4e8;border-left:5px solid #f08a3c;color:#6d4c2d;font-size:13px}label{display:grid;gap:7px;margin:13px 0;color:#4d5961;font-size:13px;font-weight:700}input,textarea,select{width:100%;padding:10px;border:1px solid #cbd3d5;font:inherit}textarea{min-height:160px;font:12px/1.5 Consolas,monospace}button{padding:10px 13px;color:#fff;background:var(--blue);border:1px solid var(--blue);font-weight:800;cursor:pointer}button.secondary{color:var(--ink);background:#fff;border-color:#bdc7ca}button:disabled{opacity:.5;cursor:not-allowed}.actions{display:flex;flex-wrap:wrap;gap:8px}.identity{padding:14px;background:#f4f7f7;border-top:4px solid var(--blue)}.identity code{display:block;overflow-wrap:anywhere}.claims{display:grid;gap:8px;margin:12px 0}.claim{display:flex;gap:8px;padding:9px;background:#f5f7f7;font-size:13px}.message{min-height:20px;color:var(--blue);font-size:13px;font-weight:700}.credential{padding:13px;border:1px solid var(--line);margin:9px 0}.credential strong,.credential small{display:block}.credential small{color:var(--muted);margin-top:4px}@media(max-width:720px){.layout{grid-template-columns:1fr}.card.wide{grid-column:auto}}
+  </style>
+</head>
+<body>
+  <header class="top"><span class="badge">SELF-CUSTODY HOLDER WALLET</span><h1>信证钱包</h1><p>Holder 私钥仅在当前浏览器的本地 IndexedDB 中保存；钱包不会调用平台接口上传私钥，也不会把私钥写入凭证交付包。</p></header>
+  <main class="layout">
+    <section class="card"><h2>1. 创建我的 DID</h2><p>在本设备本地生成不可导出的 Ed25519 私钥和 `did:key`。请妥善保管本浏览器配置；此 MVP 尚未提供跨设备恢复。</p><label>身份名称<input id="identity-name" maxlength="120" value="我的钱包身份"></label><div class="actions"><button id="create-identity">本地生成密钥与 DID</button><button id="copy-registration" class="secondary" disabled>复制登记包</button></div><p class="message" id="identity-message"></p><div id="identity-output" class="identity" hidden></div></section>
+    <section class="card"><h2>2. 向签发机构登记</h2><p>把“登记包”交给学校或企业。机构只登记 DID Document 中的公钥，不能取得你的私钥。</p><textarea id="registration-output" readonly placeholder="创建身份后，这里会显示可交付给签发机构的公开登记包"></textarea><div class="warning">登记包仅含 DID、公钥和 DID Document；不含私钥、恢复材料或已有凭证。</div></section>
+    <section class="card wide"><h2>3. 接收机构签发的 VC</h2><p>从签发平台获得“钱包 VC 交付包”后粘贴到这里。该包包含完整 VC 和由 Issuer 签名的 SD-JWT 披露材料，只会保存到本钱包本地。</p><textarea id="package-input" placeholder="粘贴 wallet-vc-package-v1 JSON"></textarea><div class="actions"><button id="import-package">导入到本地钱包</button></div><p class="message" id="package-message"></p><div id="wallet-credentials"></div></section>
+    <section class="card wide"><h2>4. 本地生成最小披露证明</h2><p>验证方应提供一次性的 Challenge 和自身域名/标识。钱包在本地选择字段、组装 SD-JWT，并用 Holder 私钥对本次出示绑定签名。</p><label>选择本地凭证<select id="credential-select"><option value="">尚未导入凭证</option></select></label><div class="claims" id="claim-options"></div><div class="layout" style="padding:0;max-width:none"><label>Verifier Challenge<input id="challenge" minlength="16" placeholder="由验证方提供，至少 16 个字符"></label><label>Verifier 域名/标识<input id="domain" placeholder="例如 hr.example.com"></label></div><div class="actions"><button id="new-challenge" class="secondary">生成本地示例 Challenge</button><button id="create-presentation">本地生成披露证明</button></div><p class="message" id="presentation-message"></p><textarea id="presentation-output" readonly placeholder="生成后复制给验证方；内容不包含 Holder 私钥"></textarea><div class="danger">提示：本 MVP 已实现 Holder 本地签名绑定；验证方的 Challenge 应由验证方保存并只接受一次，服务端防重放台账将在下一阶段补充。</div></section>
+  </main>
+  <script type="module">
+    import { createAndStoreIdentity, loadIdentity, registrationPackage, importWalletPackage, listWalletPackages, createWalletPresentation, DISCLOSABLE_PATHS, randomChallenge } from './wallet-core.js'
+    let identity = null; let packages = []
+    const byId = (id) => document.getElementById(id)
+    const say = (id, text) => { byId(id).textContent = text }
+    const renderIdentity = () => {
+      const output = byId('identity-output'); const registration = byId('registration-output')
+      if (!identity) { output.hidden = true; byId('copy-registration').disabled = true; return }
+      output.hidden = false; output.innerHTML = `<strong>${identity.label}</strong><code>${identity.did}</code><small>私钥已生成在本地，未导出、未上传。</small>`
+      registration.value = JSON.stringify(registrationPackage(identity), null, 2); byId('copy-registration').disabled = false
+    }
+    const renderPackages = () => {
+      const select = byId('credential-select'); const list = byId('wallet-credentials'); const old = select.value
+      select.innerHTML = '<option value="">选择本地凭证</option>' + packages.map((item) => `<option value="${item.credentialId}">${item.credentialId}</option>`).join('')
+      select.value = old; list.innerHTML = packages.map((item) => `<article class="credential"><strong>${item.credential?.credentialSubject?.course || 'VC'}</strong><small>${item.credentialId} · 仅本地钱包保存</small></article>`).join('') || '<p class="hint">尚未导入凭证。</p>'
+      renderClaims()
+    }
+    const renderClaims = () => {
+      const item = packages.find((entry) => entry.credentialId === byId('credential-select').value); const target = byId('claim-options')
+      target.innerHTML = item ? DISCLOSABLE_PATHS.filter(([path]) => item.sdJwt.disclosures[path]).map(([path, label]) => `<label class="claim"><input type="checkbox" value="${path}" checked>${label}</label>`).join('') : '<span class="hint">请选择本地凭证后选择披露字段。</span>'
+    }
+    byId('create-identity').onclick = async () => { try { identity = await createAndStoreIdentity(byId('identity-name').value); renderIdentity(); say('identity-message', '身份已在本地创建。请复制登记包交给签发机构。') } catch (error) { say('identity-message', error.message || '创建失败') } }
+    byId('copy-registration').onclick = async () => { try { await navigator.clipboard.writeText(byId('registration-output').value); say('identity-message', '公开登记包已复制。') } catch { say('identity-message', '复制失败，请手动复制登记包。') } }
+    byId('import-package').onclick = async () => { try { const imported = await importWalletPackage(byId('package-input').value, identity); packages = await listWalletPackages(); renderPackages(); byId('credential-select').value = imported.credentialId; renderClaims(); byId('package-input').value = ''; say('package-message', 'VC 已导入本地钱包。') } catch (error) { say('package-message', error.message || '导入失败') } }
+    byId('credential-select').onchange = renderClaims
+    byId('new-challenge').onclick = () => { byId('challenge').value = randomChallenge() }
+    byId('create-presentation').onclick = async () => { try { const walletPackage = packages.find((entry) => entry.credentialId === byId('credential-select').value); const paths = [...document.querySelectorAll('#claim-options input:checked')].map((input) => input.value); const presentation = await createWalletPresentation({ identity, walletPackage, paths, challenge: byId('challenge').value, domain: byId('domain').value }); byId('presentation-output').value = JSON.stringify(presentation, null, 2); say('presentation-message', '披露证明已由钱包本地生成并签名。') } catch (error) { say('presentation-message', error.message || '生成失败') } }
+    identity = await loadIdentity(); packages = await listWalletPackages(); renderIdentity(); renderPackages()
+  </script>
+</body>
+</html>

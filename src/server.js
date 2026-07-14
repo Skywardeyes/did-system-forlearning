@@ -171,7 +171,8 @@ async function serveStatic(response, pathname) {
   }
 }
 
-export function createAppServer(activeService, { logService = noOpLogService, v2Api = null, legacyApiEnabled = true, requireHttps = false } = {}) { return createServer(async (request, response) => {
+export function createAppServer(activeService, { logService = noOpLogService, v2Api = null, legacyApiEnabled = true,
+  requireHttps = false, serveFrontend = true } = {}) { return createServer(async (request, response) => {
   const correlationId = randomUUID();
   const requestService = activeService?.withAuditContext
     ? activeService.withAuditContext(logService, correlationId)
@@ -180,13 +181,16 @@ export function createAppServer(activeService, { logService = noOpLogService, v2
   try {
     const secureRequest = Boolean(request.socket?.encrypted) || String(request.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
     if (requireHttps && !secureRequest) return sendJson(response, 426, { error: 'HTTPS is required', code: 'HTTPS_REQUIRED' });
-    if (v2Api && url.pathname.startsWith('/api/v2/')) {
+    if (request.method === 'GET' && url.pathname === '/health') {
+      return sendJson(response, 200, { status: 'ok', frontend: serveFrontend ? 'legacy-static' : 'external' });
+    } else if (v2Api && url.pathname.startsWith('/api/v2/')) {
       const result = await v2Api.handle(request, url, correlationId, readJson);
       sendJson(response, result.status, result.body);
     } else if (url.pathname.startsWith('/api/') && !legacyApiEnabled) {
       sendJson(response, 410, { error: 'Legacy API is disabled in V2 data mode', code: 'LEGACY_API_DISABLED' });
     } else if (url.pathname.startsWith('/api/')) await handleApi(request, response, url, requestService, logService, correlationId);
-    else await serveStatic(response, url.pathname);
+    else if (serveFrontend) await serveStatic(response, url.pathname);
+    else sendJson(response, 404, { error: 'Frontend is served by the web tier', code: 'FRONTEND_EXTERNAL' });
   } catch (error) {
     const conflict = /\u7248\u672c\u51b2\u7a81/.test(error.message);
     const notFound = /\u672a\u627e\u5230/.test(error.message);

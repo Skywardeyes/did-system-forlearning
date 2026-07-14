@@ -33,7 +33,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 5 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 6 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -72,7 +72,8 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
         verificationService, credentialAccessService, localSessionService, logService });
     }
     return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled,
-      requireHttps: config.security.requireHttps }), pool, dataMode: config.application.dataMode };
+      requireHttps: config.security.requireHttps, serveFrontend: config.application.serveFrontend }), pool,
+      dataMode: config.application.dataMode };
   } catch {
     await pool.end?.().catch(() => {});
     const error = new Error('Unable to initialize the configured MySQL database');
