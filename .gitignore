@@ -13,3 +13,5 @@ test-results*/
 test-records/
 frontend/dist/
 frontend/*.tsbuildinfo
+.local/
+.local-chain.pid

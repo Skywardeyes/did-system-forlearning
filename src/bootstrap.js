@@ -17,6 +17,7 @@ import { CredentialDisclosureMaterialRepository } from './repositories/credentia
 import { VerificationLogRepository } from './repositories/verification-log-repository.js';
 import { SensitiveAccessLogRepository } from './repositories/sensitive-access-log-repository.js';
 import { VerifierChallengeRepository } from './repositories/verifier-challenge-repository.js';
+import { WalletCredentialOfferRepository } from './repositories/wallet-credential-offer-repository.js';
 import { MembershipRepository } from './repositories/organization-repository.js';
 import { V2DidService } from './services/v2-did-service.js';
 import { V2CredentialService } from './services/v2-credential-service.js';
@@ -27,6 +28,8 @@ import { LocalSessionService } from './services/local-session-service.js';
 import { V2CredentialAccessService } from './services/v2-credential-access-service.js';
 import { Hs256RequestAuthenticator } from './auth/request-authenticator.js';
 import { V2Api } from './v2-api.js';
+import { WalletInboxService } from './services/wallet-inbox-service.js';
+import { ChainRegistryService } from './services/chain-registry-service.js';
 import { DualAuditLogStore, V2AuditLogStore } from './repositories/v2-audit-log-store.js';
 
 export async function bootstrap(env = process.env, { createPool = mysql.createPool } = {}) {
@@ -34,7 +37,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 7 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 8 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -54,11 +57,12 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const disclosureMaterialRepository = new CredentialDisclosureMaterialRepository({ envelopeCrypto });
       const verificationLogRepository = new VerificationLogRepository({ envelopeCrypto });
       const verifierChallengeRepository = new VerifierChallengeRepository();
+      const walletOfferRepository = new WalletCredentialOfferRepository({ envelopeCrypto });
       const sensitiveAccessLogRepository = new SensitiveAccessLogRepository();
       const transactionalKms = new TransactionalLocalKms(envelopeCrypto);
       const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, kms: transactionalKms });
       const credentialService = new V2CredentialService({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository,
-        credentialStatusEventRepository, disclosureMaterialRepository, kms: transactionalKms });
+        credentialStatusEventRepository, disclosureMaterialRepository, walletOfferRepository, kms: transactionalKms });
       const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
       const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
         credentialRepository, verificationLogRepository, verifierChallengeRepository });
@@ -70,8 +74,10 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
         organizationName: env.BOOTSTRAP_ORG_NAME || '本地演示组织',
         externalSubject: env.BOOTSTRAP_ADMIN_SUBJECT || 'local-admin',
       });
+      const walletInboxService = new WalletInboxService({ pool, walletOfferRepository });
+      const chainRegistryService = new ChainRegistryService({ blockchain: config.blockchain });
       v2Api = new V2Api({ authenticator, accessService, didService, credentialService, disclosureService,
-        verificationService, credentialAccessService, localSessionService, logService });
+        verificationService, credentialAccessService, localSessionService, logService, walletInboxService, chainRegistryService });
     }
     return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled,
       requireHttps: config.security.requireHttps, serveFrontend: config.application.serveFrontend }), pool,

@@ -138,3 +138,11 @@ export async function createWalletPresentation({ identity, walletPackage, paths,
   return { ...binding, holderProof: { type: 'Ed25519Signature2020', created: new Date().toISOString(),
     verificationMethod, proofPurpose: 'authentication', challenge: nonce, domain: audience, proofValue: toBase64Url(new Uint8Array(signature)) } }
 }
+
+export async function createInboxProof({ identity, action, challenge }) {
+  if (!identity?.privateKey || !identity?.did || !challenge) throw new Error('钱包身份或收件箱 Challenge 不可用')
+  const verificationMethod = identity.document.verificationMethod[0].id
+  const request = { type: 'WalletInboxRequest2026', holderDid: identity.did, action, challenge, domain: 'wallet-inbox' }
+  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, identity.privateKey, new TextEncoder().encode(stableStringify(request)))
+  return { verificationMethod, proofValue: toBase64Url(new Uint8Array(signature)) }
+}

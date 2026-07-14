@@ -29,6 +29,9 @@
     "frontend:build": "npm --prefix frontend run build",
     "frontend:test": "npm --prefix frontend run test",
     "wallet:dev": "node wallet/start.js",
+    "chain:node": "ganache --wallet.deterministic --chain.chainId 31337 --server.port 8545",
+    "chain:compile": "node blockchain/compile.js",
+    "chain:deploy": "node blockchain/deploy.js",
     "test:ui:vue": "playwright test --config=playwright.vue.config.js",
     "test:all": "node test/run-recorded-tests.js",
     "test:evidence": "node test/run-recorded-tests.js",
@@ -42,6 +45,9 @@
     "@playwright/test": "^1.61.1"
   },
   "dependencies": {
-    "mysql2": "^3.22.6"
+    "ethers": "^6.17.0",
+    "ganache": "^7.9.2",
+    "mysql2": "^3.22.6",
+    "solc": "^0.8.36"
   }
 }

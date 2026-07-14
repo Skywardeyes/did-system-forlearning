@@ -177,8 +177,14 @@ export function createAppServer(activeService, { logService = noOpLogService, v2
   const requestService = activeService?.withAuditContext
     ? activeService.withAuditContext(logService, correlationId)
     : activeService;
-  const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
-  try {
+    const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
+    try {
+    if (url.pathname.startsWith('/api/v2/wallet-inbox/') || url.pathname === '/api/v2/session/local' || url.pathname === '/api/v2/holder-dids/registration') {
+      response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5176');
+      response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+      response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
+    }
     const secureRequest = Boolean(request.socket?.encrypted) || String(request.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';
     if (requireHttps && !secureRequest) return sendJson(response, 426, { error: 'HTTPS is required', code: 'HTTPS_REQUIRED' });
     if (request.method === 'GET' && url.pathname === '/health') {

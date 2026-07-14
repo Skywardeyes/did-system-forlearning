@@ -61,13 +61,14 @@ function toSummaryRecord(record) {
 }
 
 export class V2CredentialService {
-  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, credentialStatusEventRepository, disclosureMaterialRepository, kms }) {
+  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, credentialStatusEventRepository, disclosureMaterialRepository, walletOfferRepository = null, kms }) {
     this.unitOfWork = unitOfWork;
     this.didRepository = didRepository;
     this.didKeyVersionRepository = didKeyVersionRepository;
     this.credentialRepository = credentialRepository;
     this.credentialStatusEventRepository = credentialStatusEventRepository;
     this.disclosureMaterialRepository = disclosureMaterialRepository;
+    this.walletOfferRepository = walletOfferRepository;
     this.kms = kms;
   }
 
@@ -185,11 +186,21 @@ export class V2CredentialService {
       validFrom: normalized.validFrom, validUntil: normalized.validUntil, issuedAt, suspendedAt: null, resumedAt: null,
       revokedAt: null, replacedAt: null, replacesCredentialId, replacedByCredentialId: null, credential,
     });
-    if (this.disclosureMaterialRepository) {
-      await this.disclosureMaterialRepository.upsert(operation, await this.createDisclosureMaterials(operation, record, key));
-    }
+    let materials = null;
+    if (this.disclosureMaterialRepository) { materials = await this.createDisclosureMaterials(operation, record, key); await this.disclosureMaterialRepository.upsert(operation, materials); }
+    if (this.walletOfferRepository && materials) await this.walletOfferRepository.create(operation, {
+      id: randomUUID(), credentialId: record.id, holderDid: holder.did, createdAt: issuedAt,
+      delivery: this.walletPackage(record, materials),
+    });
     await this.appendEvent(operation, record.id, null, 'active', replacesCredentialId ? 'replacement-issued' : 'issued', issuedAt);
     return record;
+  }
+
+  walletPackage(record, material) {
+    return { format: 'wallet-vc-package-v1', version: 1, createdAt: new Date().toISOString(), credentialId: record.id,
+      holderDid: record.credential.credentialSubject.id, issuerDid: record.credential.issuer, credential: clone(record.credential),
+      sdJwt: { issuerJwt: material.sdJwtMaterial.issuerJwt,
+        disclosures: Object.fromEntries(Object.entries(material.sdJwtMaterial.disclosures).map(([path, entry]) => [path, entry.disclosure])) } };
   }
 
   async createDisclosureMaterials(operation, record, key) {

@@ -147,6 +147,14 @@ export class V2DidService {
     });
   }
 
+  async getDid(context, id) {
+    return this.unitOfWork.run(context, async (operation) => {
+      const did = await this.didRepository.findById(operation, id);
+      if (!did) { const error = new Error('DID was not found'); error.code = 'NOT_FOUND'; throw error; }
+      return publicDid(did);
+    });
+  }
+
   async updateDid(context, id, input) {
     return this.unitOfWork.run(context, async (operation) => {
       const did = await this.didRepository.getForUpdate(operation, id);

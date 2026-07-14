@@ -7,6 +7,12 @@ export interface DidSummary {
   keyCustody: 'holder_self_custody' | 'issuer_managed_kms' | 'legacy_demo_custody';
 }
 
+export interface ChainDidRecord {
+  enabled: boolean; ready?: boolean; reason?: string; did: string; didHash: string; registered: boolean;
+  controller?: string; documentHash?: string; version?: number; deactivated?: boolean; updatedAt?: number | null;
+  transactionHash?: string; blockNumber?: number; chainId?: string; contractAddress?: string;
+}
+
 export interface CredentialSummary {
   id: string; status: string; issuerDidId: string; holderDidId: string; issuedAt: string;
   validFrom: string; validUntil: string; rowVersion: number; contentProtected: true;

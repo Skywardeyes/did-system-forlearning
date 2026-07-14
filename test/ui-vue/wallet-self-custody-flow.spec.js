@@ -48,9 +48,11 @@ test('personal wallet keeps Holder key local through registration, issuance, del
   expect(delivery).not.toBeNull();
   await dialog.locator('button.icon-button').click();
 
+  await wallet.locator('[data-view-link="credentials"]').click();
   await wallet.locator('#package-input').fill(delivery || '');
   await wallet.locator('#import-package').click();
   await expect(wallet.locator('#credential-select')).toHaveValue(issued.id);
+  await wallet.locator('[data-view-link="disclosure"]').click();
   await wallet.locator('#challenge').fill('verifier-challenge-wallet-001');
   await wallet.locator('#domain').fill('hr.example.com');
   await wallet.locator('#create-presentation').click();

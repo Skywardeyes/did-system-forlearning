@@ -92,6 +92,8 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
 .did-card header { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
 .did-card header .status { margin-left: auto; }
 .did-card code { display: block; margin: 9px 0 14px; color: #536069; overflow-wrap: anywhere; }
+.chain-anchor { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.chain-anchor small { color: var(--muted); }
 .tag { color: var(--blue); background: #eef3ff; border-color: #b9c9fa; text-transform: uppercase; }
 .trust-flow { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
 .trust-flow > div { position: relative; padding: 15px; border-top: 4px solid var(--blue); background: #f4f6f7; }

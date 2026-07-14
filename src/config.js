@@ -47,5 +47,11 @@ export function loadRuntimeConfig(env = process.env) {
     auth: { enabled: Boolean(authSecret), jwtHs256Secret: authSecret, localDevLogin },
     application: { dataMode, serveFrontend },
     security: { requireHttps, production },
+    blockchain: {
+      enabled: String(env.BLOCKCHAIN_ENABLED || 'false').trim().toLowerCase() === 'true',
+      rpcUrl: String(env.BLOCKCHAIN_RPC_URL || 'http://127.0.0.1:8545').trim(),
+      chainId: Number(env.BLOCKCHAIN_CHAIN_ID || '31337'),
+      contractAddress: String(env.BLOCKCHAIN_CONTRACT_ADDRESS || '').trim() || null,
+    },
   };
 }

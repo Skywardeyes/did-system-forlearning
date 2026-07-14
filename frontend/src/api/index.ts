@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { CredentialSummary, DidSummary, Page, SensitiveAccessLog, StructuredLog, VerificationLog, VerificationResult } from '../types'
+import type { ChainDidRecord, CredentialSummary, DidSummary, Page, SensitiveAccessLog, StructuredLog, VerificationLog, VerificationResult } from '../types'
 
 export const sessionApi = { local: () => api('/api/v2/session/local', { method: 'POST', body: '{}' }) }
 export const didApi = {
@@ -8,6 +8,12 @@ export const didApi = {
   update: (id: string, body: object) => api<DidSummary>(`/api/v2/dids/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   action: (id: string, action: 'rotate-key' | 'deactivate', expectedVersion: number) => api<DidSummary>(`/api/v2/dids/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: JSON.stringify({ expectedVersion }) }),
   registerHolder: (body: object) => api<DidSummary>('/api/v2/holder-dids/registration', { method: 'POST', body: JSON.stringify(body) }),
+}
+export const blockchainApi = {
+  status: () => api<Pick<ChainDidRecord, 'enabled' | 'ready' | 'reason' | 'chainId' | 'contractAddress'>>('/api/v2/blockchain/status'),
+  resolveDid: (id: string) => api<ChainDidRecord>(`/api/v2/blockchain/dids/${encodeURIComponent(id)}`),
+  syncDid: (id: string) => api<ChainDidRecord>(`/api/v2/blockchain/dids/${encodeURIComponent(id)}/sync`, { method: 'POST', body: '{}' }),
+  deactivateDid: (id: string) => api<ChainDidRecord>(`/api/v2/blockchain/dids/${encodeURIComponent(id)}/deactivate`, { method: 'POST', body: '{}' }),
 }
 export const credentialApi = {
   list: () => api<Page<CredentialSummary>>('/api/v2/credentials?page=1&pageSize=50'),

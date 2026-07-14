@@ -10,14 +10,18 @@ import { localDemoWalletIdentity } from './demo-wallet-identity.js';
 
 export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
-    credentialAccessService, localSessionService = null, logService = null }) {
+    credentialAccessService, localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null }) {
     this.authenticator = authenticator; this.accessService = accessService; this.didService = didService;
     this.credentialService = credentialService; this.disclosureService = disclosureService;
     this.verificationService = verificationService; this.localSessionService = localSessionService; this.logService = logService;
-    this.credentialAccessService = credentialAccessService;
+    this.credentialAccessService = credentialAccessService; this.walletInboxService = walletInboxService; this.chainRegistryService = chainRegistryService;
   }
 
   async handle(request, url, requestId, readJson) {
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/challenge') return { status: 201, body: await this.walletInboxService.issueChallenge((await readJson(request)).holderDid) };
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/offers') return { status: 200, body: await this.walletInboxService.list(await readJson(request)) };
+    const inboxDecision = url.pathname.match(/^\/api\/v2\/wallet-inbox\/offers\/([^/]+)\/(claim|reject)$/);
+    if (request.method === 'POST' && inboxDecision) return { status: 200, body: await this.walletInboxService.decide(await readJson(request), decodeURIComponent(inboxDecision[1]), inboxDecision[2] === 'claim' ? 'claimed' : 'rejected') };
     if (request.method === 'POST' && url.pathname === '/api/v2/session/local') {
       if (!this.localSessionService) { const error = new Error('Local development login is disabled'); error.code = 'NOT_FOUND'; throw error; }
       return { status: 200, body: await this.localSessionService.issue(await readJson(request)) };
@@ -40,6 +44,23 @@ export class V2Api {
 
   async handleAuthorized(context, request, url, readJson) {
     const query = { search: url.searchParams.get('search') || '', page: url.searchParams.get('page'), pageSize: url.searchParams.get('pageSize') };
+    if (request.method === 'GET' && url.pathname === '/api/v2/blockchain/status') {
+      await this.accessService.requireAnyRole(context, roles.reader);
+      return { status: 200, body: await this.chainRegistryService.status() };
+    }
+    const chainDid = url.pathname.match(/^\/api\/v2\/blockchain\/dids\/([^/]+)\/(sync|deactivate)$/);
+    if (request.method === 'POST' && chainDid) {
+      await this.accessService.requireAnyRole(context, roles.administrator);
+      const did = await this.didService.getDid(context, decodeURIComponent(chainDid[1]));
+      return { status: 200, body: chainDid[2] === 'sync'
+        ? await this.chainRegistryService.syncIssuerDid(did) : await this.chainRegistryService.deactivateIssuerDid(did) };
+    }
+    const chainDidStatus = url.pathname.match(/^\/api\/v2\/blockchain\/dids\/([^/]+)$/);
+    if (request.method === 'GET' && chainDidStatus) {
+      await this.accessService.requireAnyRole(context, roles.reader);
+      const did = await this.didService.getDid(context, decodeURIComponent(chainDidStatus[1]));
+      return { status: 200, body: await this.chainRegistryService.resolveDid(did.did) };
+    }
     if (request.method === 'GET' && url.pathname === '/api/v2/state') {
       await this.accessService.requireAnyRole(context, roles.reader);
       const [dids, credentials, evidence] = await Promise.all([
