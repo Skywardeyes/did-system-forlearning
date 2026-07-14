@@ -14,6 +14,22 @@ class DidRepository {
 class KeyRepository { constructor(key) { this.key = key; } async findByDidVersion(_operation, didId) { return didId === 'issuer-id' ? this.key : null; } }
 class CredentialRepository { constructor(record) { this.record = record; } async findById(_operation, id) { return id === this.record.id ? structuredClone(this.record) : null; } }
 class LogRepository { constructor() { this.entries = []; } async append(_operation, entry) { this.entries.push(entry); return entry; } }
+class ChallengeRepository {
+  constructor() { this.consumed = false; this.issued = []; }
+  async issue(_operation, entry) { this.issued.push(entry); return entry; }
+  async consume(_operation, input) { if (this.consumed || input.domain !== 'hr.example.com') return false; this.consumed = true; return true; }
+}
+
+test('Verifier issues a short-lived Challenge while storing only its hash', async () => {
+  const challenges = new ChallengeRepository();
+  const service = new V2VerificationService({ unitOfWork: new UnitOfWork(), verifierChallengeRepository: challenges });
+  const issued = await service.issueWalletChallenge(context, { domain: 'HR.Example.com', ttlSeconds: 120 });
+  assert.equal(issued.domain, 'hr.example.com');
+  assert.equal(issued.challenge.length >= 32, true);
+  assert.equal(challenges.issued.length, 1);
+  assert.notEqual(challenges.issued[0].challengeHash, issued.challenge);
+  assert.equal(challenges.issued[0].challengeHash.length, 64);
+});
 
 test('Verifier validates an issuer SD-JWT plus the Holder wallet local signature without receiving a Holder private key', async () => {
   const holder = await createIdentity('Wallet Holder');
@@ -30,7 +46,7 @@ test('Verifier validates an issuer SD-JWT plus the Holder wallet local signature
     credential: { credentialSubject: { id: holder.did }, proof: { proofValue: 'issuer-signature' } },
     sdJwt: { issuerJwt, disclosures: { 'credentialSubject.course': disclosure.disclosure } } };
   const presentation = await createWalletPresentation({ identity: holder, walletPackage, paths: ['credentialSubject.course'], challenge: 'verifier-challenge-1234', domain: 'hr.example.com' });
-  const logs = new LogRepository();
+  const logs = new LogRepository(); const challenges = new ChallengeRepository();
   const service = new V2VerificationService({ unitOfWork: new UnitOfWork(),
     didRepository: new DidRepository([
       { id: 'issuer-id', did: issuerDid, role: 'issuer', status: 'active', document: {} },
@@ -38,7 +54,7 @@ test('Verifier validates an issuer SD-JWT plus the Holder wallet local signature
     ]),
     didKeyVersionRepository: new KeyRepository({ version: 1, verificationMethod: `${issuerDid}#key-1`, publicJwk: issuerPublic }),
     credentialRepository: new CredentialRepository({ id: credentialId, status: 'active', validUntil: new Date(Date.now() + 3600_000).toISOString() }),
-    verificationLogRepository: logs,
+    verificationLogRepository: logs, verifierChallengeRepository: challenges,
   });
   const result = await service.verifyWalletPresentation(context, presentation);
   assert.equal(result.valid, true);
@@ -46,4 +62,7 @@ test('Verifier validates an issuer SD-JWT plus the Holder wallet local signature
   assert.equal(result.checks.find((item) => item.key === 'holderSubject').passed, true);
   assert.equal(JSON.stringify(presentation).includes('privateKey'), false);
   assert.equal(logs.entries.at(-1).verificationKind, 'wallet-sd-jwt');
+  const replay = await service.verifyWalletPresentation(context, presentation);
+  assert.equal(replay.valid, false);
+  assert.equal(replay.checks.find((item) => item.key === 'challenge').passed, false);
 });

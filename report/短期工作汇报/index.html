@@ -36,7 +36,7 @@
     <div class="hero-meta">
       <div><strong>ef61db6</strong><span>统计基线：远端合并提交</span></div>
       <div><strong>2</strong><span>已完成正式 Git 提交</span></div>
-      <div><strong>V6</strong><span>当前数据库 Schema</span></div>
+      <div><strong>V7</strong><span>当前数据库 Schema</span></div>
       <div><strong>213/213</strong><span>Node 自动化测试通过</span></div>
     </div>
     <span class="scroll-tip">SCROLL TO REVIEW ↓</span>
@@ -77,7 +77,7 @@
         <div class="arrow-down">↓</div>
         <div class="architecture-row"><div class="layer-label">数据访问层</div><div class="boxes"><div class="box"><b>Repository</b><small>SQL 封装与租户过滤</small></div><div class="box"><b>Unit of Work</b><small>统一提交与回滚</small></div><div class="box"><b>KMS Boundary</b><small>私钥不离开边界</small></div><div class="box"><b>Optimistic Lock</b><small>版本冲突保护</small></div></div></div>
         <div class="arrow-down">↓</div>
-        <div class="architecture-row"><div class="layer-label">持久化层</div><div class="boxes"><div class="box"><b>MySQL V6</b><small>结构化关系数据</small></div><div class="box"><b>AES-256-GCM</b><small>敏感字段认证加密</small></div><div class="box"><b>Status Events</b><small>生命周期只追加记录</small></div><div class="box"><b>Audit Logs</b><small>操作证据链</small></div></div></div>
+        <div class="architecture-row"><div class="layer-label">持久化层</div><div class="boxes"><div class="box"><b>MySQL V7</b><small>结构化关系数据</small></div><div class="box"><b>AES-256-GCM</b><small>敏感字段认证加密</small></div><div class="box"><b>Challenge Ledger</b><small>仅保存哈希并原子消费</small></div><div class="box"><b>Audit Logs</b><small>操作证据链</small></div></div></div>
       </div>
       <div class="split-title"><h3>渐进迁移而非“一刀切”</h3><span>降低既有数据与演示流程的迁移风险</span></div>
       <div class="flow">
@@ -125,7 +125,7 @@ Content-Type: application/json
         <div class="arrow-down">↓ HTTPS / 同源</div>
         <div class="architecture-row"><div class="layer-label">Web 层</div><div class="boxes"><div class="box"><b>Nginx</b><small>提供 Vue 静态资源</small></div><div class="box"><b>/api Proxy</b><small>转发到 Node</small></div><div class="box"><b>CSP</b><small>限制资源来源</small></div><div class="box"><b>TLS</b><small>统一传输保护</small></div></div></div>
         <div class="arrow-down">↓</div>
-        <div class="architecture-row"><div class="layer-label">服务与数据</div><div class="boxes"><div class="box"><b>Node API-only</b><small>SERVE_FRONTEND=false</small></div><div class="box"><b>V2 Auth</b><small>租户与角色上下文</small></div><div class="box"><b>Issuer KMS</b><small>仅管理机构签名密钥</small></div><div class="box"><b>MySQL V6</b><small>加密持久化</small></div></div></div>
+        <div class="architecture-row"><div class="layer-label">服务与数据</div><div class="boxes"><div class="box"><b>Node API-only</b><small>SERVE_FRONTEND=false</small></div><div class="box"><b>V2 Auth</b><small>租户与角色上下文</small></div><div class="box"><b>Issuer KMS</b><small>仅管理机构签名密钥</small></div><div class="box"><b>MySQL V7</b><small>含一次性 Challenge 台账</small></div></div></div>
       </div>
       <div class="split-title"><h3>六个已迁移页面</h3><span>当前工作区，已完成构建和浏览器验证</span></div>
       <div class="grid-3">
@@ -149,7 +149,7 @@ Content-Type: application/json
           <div><div class="bar-label"><span>旧 V2 界面回归</span><b>1 / 1</b></div><div class="bar-track"><div class="bar-fill" style="width:100%"></div></div></div>
         </div></div>
         <div class="test-list">
-          <div class="test-item"><i>✓</i><b>MySQL Schema V6</b><span>健康</span></div>
+          <div class="test-item"><i>✓</i><b>MySQL Schema V7</b><span>健康</span></div>
           <div class="test-item"><i>✓</i><b>V2-only 数据链路</b><span>通过</span></div>
           <div class="test-item"><i>✓</i><b>VC 列表明文保护</b><span>通过</span></div>
           <div class="test-item"><i>✓</i><b>敏感访问强制审计</b><span>通过</span></div>
@@ -167,7 +167,7 @@ Content-Type: application/json
 
     <section class="section" id="next">
       <div class="section-head"><div class="section-no">06</div><div><div class="eyebrow">SELF-CUSTODY MVP</div><h2>答辩反馈已落地：Holder 私钥回到个人钱包</h2><p class="section-intro">当前 MVP 已把 Holder DID 的生成与出示签名移到独立钱包：浏览器 Web Crypto 生成不可导出私钥，平台只登记公开 DID Document，不能读取或代签 Holder 私钥。</p></div></div>
-      <div class="risk"><h3>已落地的边界与尚未夸大的部分</h3><p>机构 Issuer 私钥仍由 KMS 管理；钱包交付包只含 VC 与 Issuer 签名材料；最小披露由钱包本地签名并绑定 Challenge 和验证方域名。正式 DID Registry、跨设备恢复、Challenge 防重放台账和标准 SD-JWT Holder Binding 仍是下一阶段，绝不保存个人私钥、VC 明文或个人信息到链上。</p></div>
+      <div class="risk"><h3>已落地的边界与尚未夸大的部分</h3><p>机构 Issuer 私钥仍由 KMS 管理；钱包交付包只含 VC 与 Issuer 签名材料；最小披露由钱包本地签名并绑定 Challenge 和验证方域名。验证方只把 Challenge 的 SHA-256 哈希写入台账，并在首次成功验证时原子消费，重放会失败。正式 DID Registry、跨设备恢复和标准 SD-JWT Holder Binding 仍是下一阶段，绝不保存个人私钥、VC 明文或个人信息到链上。</p></div>
       <div class="split-title"><h3>接下来三项工作</h3><span>按风险和迁移依赖排序</span></div>
       <div class="next">
         <article><h3>个人钱包 MVP（已完成）</h3><p>本地生成 Holder 私钥和 DID；私钥不上传，钱包本地保存 VC、选择字段并生成 Holder 签名的披露证明。</p></article>

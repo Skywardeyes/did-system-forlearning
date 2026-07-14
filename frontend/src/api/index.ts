@@ -20,6 +20,7 @@ export const credentialApi = {
   walletPackage: (id: string) => api<Record<string, unknown>>(`/api/v2/credentials/${encodeURIComponent(id)}/wallet-package`, { method: 'POST', body: '{}' }),
   verifyDisclosure: (presentation: object) => api<VerificationResult>('/api/v2/disclosures/verify', { method: 'POST', body: JSON.stringify({ presentation }) }),
   verifySdJwt: (sdJwt: string) => api<VerificationResult>('/api/v2/sd-jwt/verify', { method: 'POST', body: JSON.stringify({ sdJwt }) }),
+  createWalletChallenge: (body: { domain: string; ttlSeconds?: number }) => api<{ challenge: string; domain: string; expiresAt: string; ttlSeconds: number }>('/api/v2/wallet-challenges', { method: 'POST', body: JSON.stringify(body) }),
   verifyWalletPresentation: (presentation: object) => api<VerificationResult>('/api/v2/wallet-presentations/verify', { method: 'POST', body: JSON.stringify({ presentation }) }),
 }
 export const ledgerApi = {

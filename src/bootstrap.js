@@ -16,6 +16,7 @@ import { CredentialStatusEventRepository } from './repositories/credential-statu
 import { CredentialDisclosureMaterialRepository } from './repositories/credential-disclosure-material-repository.js';
 import { VerificationLogRepository } from './repositories/verification-log-repository.js';
 import { SensitiveAccessLogRepository } from './repositories/sensitive-access-log-repository.js';
+import { VerifierChallengeRepository } from './repositories/verifier-challenge-repository.js';
 import { MembershipRepository } from './repositories/organization-repository.js';
 import { V2DidService } from './services/v2-did-service.js';
 import { V2CredentialService } from './services/v2-credential-service.js';
@@ -33,7 +34,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 6 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 7 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -52,6 +53,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const credentialStatusEventRepository = new CredentialStatusEventRepository();
       const disclosureMaterialRepository = new CredentialDisclosureMaterialRepository({ envelopeCrypto });
       const verificationLogRepository = new VerificationLogRepository({ envelopeCrypto });
+      const verifierChallengeRepository = new VerifierChallengeRepository();
       const sensitiveAccessLogRepository = new SensitiveAccessLogRepository();
       const transactionalKms = new TransactionalLocalKms(envelopeCrypto);
       const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, kms: transactionalKms });
@@ -59,7 +61,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
         credentialStatusEventRepository, disclosureMaterialRepository, kms: transactionalKms });
       const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
       const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
-        credentialRepository, verificationLogRepository });
+        credentialRepository, verificationLogRepository, verifierChallengeRepository });
       const credentialAccessService = new V2CredentialAccessService({ unitOfWork, credentialRepository, sensitiveAccessLogRepository });
       const accessService = new V2AccessService({ unitOfWork, membershipRepository: new MembershipRepository() });
       const authenticator = new Hs256RequestAuthenticator({ secret: config.auth.jwtHs256Secret });

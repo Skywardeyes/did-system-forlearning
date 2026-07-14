@@ -87,6 +87,10 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.verifier);
       return { status: 200, body: await this.verificationService.verifySdJwt(context, (await readJson(request)).sdJwt) };
     }
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-challenges') {
+      await this.accessService.requireAnyRole(context, roles.verifier);
+      return { status: 201, body: await this.verificationService.issueWalletChallenge(context, await readJson(request)) };
+    }
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-presentations/verify') {
       await this.accessService.requireAnyRole(context, roles.verifier);
       return { status: 200, body: await this.verificationService.verifyWalletPresentation(context, (await readJson(request)).presentation) };

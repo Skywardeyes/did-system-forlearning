@@ -81,14 +81,14 @@ src/server.js           Node HTTP API 服务
 deploy/                 Nginx 生产同源反向代理示例
 test/                   自动化验收测试
 docs/                   范围、方案、测试验收和交付材料
-database/               MySQL 迁移脚本与 V6 Schema
+database/               MySQL 迁移脚本与 V7 Schema
 ```
 
 ## 实现边界
 
 本系统参考 W3C DID Core 与 VC Data Model 2.0 的核心数据结构，实现教学演示版 DID、VC 和 proof。`did:key` 的 Ed25519 公钥指纹采用 multicodec 前缀和 base58btc 编码；完整 VC proof 使用稳定键序 JSON 和 Ed25519 签名。选择性披露使用加盐 SHA-256 声明摘要与 Ed25519 摘要清单签名。
 
-完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统实现 RFC 9901 核心 SD-JWT，并增加课程 MVP 的 `WalletBoundSdJwtPresentation2026`：钱包本地选择 Disclosure，并以 Holder Ed25519 私钥绑定 Challenge 和验证方域名。它不是正式 SD-JWT Holder Key Binding 规范实现；Challenge 防重放台账、跨机构 DID 注册网络、链上状态列表和正式身份核验仍属于下一阶段。
+完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统实现 RFC 9901 核心 SD-JWT，并增加课程 MVP 的 `WalletBoundSdJwtPresentation2026`：钱包本地选择 Disclosure，并以 Holder Ed25519 私钥绑定 Challenge 和验证方域名。验证方生成的 Challenge 只以 SHA-256 哈希写入 V7 台账，并在首次成功验证时原子消费。它不是正式 SD-JWT Holder Key Binding 规范实现；跨机构 DID 注册网络、链上状态列表和正式身份核验仍属于下一阶段。
 
 ## 配置
 

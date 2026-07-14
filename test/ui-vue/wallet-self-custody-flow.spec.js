@@ -9,7 +9,7 @@ test.beforeEach(async ({ request }) => {
   await request.post(`${apiBase}/api/v2/demo/reset`, { headers: { authorization: `Bearer ${session.accessToken}` }, data: {} });
 });
 
-test('personal wallet keeps Holder key local through registration, issuance, delivery and verification', async ({ browser, page }) => {
+test('personal wallet keeps Holder key local through registration, issuance, delivery and verification', async ({ browser, page, request }) => {
   const wallet = await browser.newPage();
   await wallet.route('**/api/**', (route) => route.abort());
   await wallet.goto(walletBase);
@@ -58,8 +58,18 @@ test('personal wallet keeps Holder key local through registration, issuance, del
   expect(presentation).not.toContain('privateKey');
   expect(presentation).toContain('holderProof');
 
+  const sessionResponse = await request.post(`${apiBase}/api/v2/session/local`, { data: {} });
+  const session = await sessionResponse.json();
+  const challengeResponse = await request.post(`${apiBase}/api/v2/wallet-challenges`, {
+    headers: { authorization: `Bearer ${session.accessToken}` }, data: { domain: 'hr.example.com' },
+  });
+  const issuedChallenge = await challengeResponse.json();
+  await wallet.locator('#challenge').fill(issuedChallenge.challenge);
+  await wallet.locator('#create-presentation').click();
+  const boundPresentation = await wallet.locator('#presentation-output').inputValue();
+
   await page.locator('a[href="/wallet-verify"]').click();
-  await page.locator('textarea').fill(presentation);
+  await page.locator('textarea').last().fill(boundPresentation);
   await page.locator('button.primary').click();
   await expect(page.locator('.message')).toContainText(/.+/);
   await wallet.close();

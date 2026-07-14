@@ -1,9 +1,10 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createClaimDigest, verifyCompactJwt, verifyCredentialSignature, verifyPayload } from '../crypto.js';
 
 const ALLOWED_PATHS = new Set(['credentialSubject.name', 'credentialSubject.course', 'credentialSubject.completionDate']);
 const SD_PATHS = { name: 'credentialSubject.name', course: 'credentialSubject.course', completion_date: 'credentialSubject.completionDate' };
 const check = (key, label, passed, detail) => ({ key, label, passed: Boolean(passed), detail });
+const challengeHash = (value) => createHash('sha256').update(value).digest('hex');
 
 function effectiveStatus(record) {
   if (!record) return 'missing';
@@ -12,9 +13,24 @@ function effectiveStatus(record) {
 }
 
 export class V2VerificationService {
-  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, verificationLogRepository }) {
+  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, verificationLogRepository, verifierChallengeRepository = null }) {
     this.unitOfWork = unitOfWork; this.didRepository = didRepository; this.didKeyVersionRepository = didKeyVersionRepository;
     this.credentialRepository = credentialRepository; this.verificationLogRepository = verificationLogRepository;
+    this.verifierChallengeRepository = verifierChallengeRepository;
+  }
+
+  async issueWalletChallenge(context, input = {}) {
+    const domain = typeof input.domain === 'string' ? input.domain.trim().toLowerCase() : '';
+    const requestedTtl = Number(input.ttlSeconds ?? 300);
+    if (!domain || domain.length > 255 || /\s/.test(domain)) throw new Error('Verifier domain is required and must not contain whitespace');
+    if (!Number.isInteger(requestedTtl) || requestedTtl < 60 || requestedTtl > 600) throw new Error('Challenge TTL must be an integer between 60 and 600 seconds');
+    if (!this.verifierChallengeRepository) throw new Error('Verifier challenge ledger is not configured');
+    const challenge = randomBytes(32).toString('base64url');
+    const createdAt = new Date(); const expiresAt = new Date(createdAt.getTime() + requestedTtl * 1000);
+    await this.unitOfWork.run(context, (operation) => this.verifierChallengeRepository.issue(operation, {
+      id: randomUUID(), challengeHash: challengeHash(challenge), domain, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(),
+    }));
+    return { challenge, domain, expiresAt: expiresAt.toISOString(), ttlSeconds: requestedTtl };
   }
 
   async resolveIssuerKey(operation, issuerDid, proof) {
@@ -128,8 +144,14 @@ export class V2VerificationService {
       try { holderSignature = Boolean(verificationMethod?.publicKeyJwk) && verifyPayload(binding, verificationMethod.publicKeyJwk, holderProof?.proofValue); } catch { holderSignature = false; }
       const holderRegistered = Boolean(holder?.role === 'holder' && holder?.metadata?.keyCustody === 'holder_self_custody');
       const holderMatchesSubject = Boolean(payload?.sub && payload.sub === presentation?.holderDid);
-      const challenge = typeof holderProof?.challenge === 'string' && holderProof.challenge.length >= 16
+      const challengeBinding = typeof holderProof?.challenge === 'string' && holderProof.challenge.length >= 16
         && holderProof.challenge === presentation?.challenge && holderProof.domain === presentation?.domain;
+      const baseValid = sdJwtResult.valid && holderRegistered && holderMatchesSubject && holderSignature && challengeBinding;
+      const challengeConsumed = baseValid && this.verifierChallengeRepository
+        ? await this.verifierChallengeRepository.consume(operation, {
+          challengeHash: challengeHash(holderProof.challenge), domain: holderProof.domain, credentialId: payload?.jti || null, consumedAt: new Date().toISOString(),
+        }) : false;
+      const challenge = challengeBinding && challengeConsumed;
       const checks = [
         ...sdJwtResult.checks,
         check('holderDid', 'Holder DID 登记', holderRegistered, holderRegistered ? '已解析个人钱包自托管 DID' : 'Holder DID 未登记或不是自托管身份'),
