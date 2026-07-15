@@ -44,6 +44,15 @@ export class CredentialTemplateRepository {
       [toStatus, sqlDate(at), id, context.tenantId, fromStatus]);
     return result.affectedRows === 1;
   }
+
+  async deleteDraft({ connection, context }, id) {
+    requireTenantContext(context);
+    const [result] = await connection.execute(
+      `DELETE FROM v2_credential_templates WHERE id = ? AND tenant_id = ? AND status = 'draft'`,
+      [id, context.tenantId],
+    );
+    return result.affectedRows === 1;
+  }
 }
 
 function mapRow(row) {

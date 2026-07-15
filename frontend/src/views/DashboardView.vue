@@ -3,12 +3,14 @@ import { computed } from 'vue'
 import { useWorkspaceStore } from '../stores/workspace'
 const workspace = useWorkspaceStore()
 const active = computed(() => workspace.activeCredentials.length)
+const issuerCount = computed(() => workspace.dids.filter((item) => item.role === 'issuer').length)
+const holderCount = computed(() => workspace.dids.filter((item) => item.role === 'holder').length)
 </script>
 
 <template>
   <div class="view">
     <section class="stats-grid">
-      <article><span>DID 身份</span><strong>{{ workspace.dids.length }}</strong><small>Issuer 与 Holder 公共身份</small></article>
+      <article><span>DID 身份</span><strong>{{ workspace.dids.length }}</strong><small><b>{{ issuerCount }}</b> 个 Issuer · <b>{{ holderCount }}</b> 个 Holder</small></article>
       <article><span>VC 摘要</span><strong>{{ workspace.credentials.length }}</strong><small>列表不返回个人声明</small></article>
       <article><span>有效凭证</span><strong>{{ active }}</strong><small>状态为 active</small></article>
       <article><span>验证记录</span><strong>{{ workspace.verificationLogs.length }}</strong><small>只追加证据链</small></article>

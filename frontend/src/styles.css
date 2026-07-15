@@ -104,6 +104,19 @@ textarea { min-height: 180px; resize: vertical; font: 12px/1.55 ui-monospace, SF
 .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 hr { height: 1px; margin: 24px 0; border: 0; background: var(--line); }
 .message { min-height: 18px; margin: 2px 0 0; color: var(--blue); font-size: 12px; font-weight: 700; }
+.search-select { position: relative; }
+.search-select-control { position: relative; display: block; }
+.search-select-control input { padding-right: 34px; }
+.search-select-control > span { position: absolute; top: 50%; right: 12px; color: var(--muted); transform: translateY(-50%); pointer-events: none; }
+.search-select-menu { position: absolute; z-index: 30; top: calc(100% + 4px); left: 0; right: 0; display: grid; max-height: 240px; overflow-y: auto; padding: 5px; border: 1px solid var(--line-strong); border-radius: var(--radius-control); background: #fff; box-shadow: 0 12px 28px #1018281c; }
+.search-select-menu button { min-height: 38px; padding: 8px 10px; border: 0; border-radius: 6px; color: var(--ink); background: transparent; text-align: left; }
+.search-select-menu button:hover, .search-select-menu button.selected { color: var(--blue); background: var(--blue-soft); }
+.search-select-menu small { padding: 10px; color: var(--muted); }
+.identity-group-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 18px 0 8px; padding: 12px 14px; border-left: 4px solid var(--blue); border-radius: 7px; background: var(--blue-soft); }
+.identity-group-head.holder { border-left-color: #2f855a; background: #eefaf3; }
+.identity-group-head strong, .identity-group-head small { display: block; }
+.identity-group-head small { margin-top: 3px; color: var(--muted); }
+.identity-group-head > span { white-space: nowrap; color: var(--muted); font-size: 12px; font-weight: 800; }
 .security-note { margin: 12px 0 0; padding: 11px 13px; border: 1px solid #d7e0f7; border-radius: 9px; color: #4b5b75; background: #f7f9ff; font-size: 12px; line-height: 1.55; }
 
 .toolbar { display: grid; grid-template-columns: minmax(210px, 1fr) repeat(2, minmax(130px, .35fr)); gap: 10px; margin-bottom: 14px; padding: 12px; border: 1px solid var(--line); border-radius: 11px; background: #f8fafc; }
@@ -133,6 +146,11 @@ td.actions button { min-height: 32px; padding: 6px 9px; font-size: 11px; }
 .did-card code { display: block; overflow-wrap: anywhere; color: #52627a; font-size: 11px; line-height: 1.5; }
 .did-card small { display: block; margin-top: 6px; color: var(--muted); font-size: 10px; }
 .did-card p { margin: 8px 0; color: #475467; font-size: 12px; line-height: 1.5; }
+.disclosed-claims { display: grid; grid-template-columns: repeat(auto-fit, minmax(145px, 1fr)); gap: 8px; margin-top: 12px; }
+.disclosed-claims div { padding: 10px 11px; border: 1px solid #d7e0f7; border-radius: 9px; background: #f7f9ff; }
+.disclosed-claims span, .disclosed-claims strong { display: block; }
+.disclosed-claims span { color: var(--muted); font-size: 10px; }
+.disclosed-claims strong { margin-top: 4px; color: var(--ink); font-size: 13px; overflow-wrap: anywhere; }
 .chain-anchor { margin-top: 12px; padding-top: 11px; border-top: 1px solid var(--line); }
 .template-field-row { display: grid; grid-template-columns: 1fr 1fr 130px auto auto; gap: 10px; align-items: end; padding: 14px; border: 1px solid var(--line); border-radius: 11px; background: #f8fafc; }
 .enum-editor { grid-column: 1 / -1; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 9px; }

@@ -111,6 +111,8 @@ test('Verifier validates multiple selectively disclosed credentials as one holde
   assert.equal(result.valid, true);
   assert.equal(result.credentials.length, 2);
   assert.deepEqual(result.credentials.map((item) => item.disclosedPaths[0]), ['credentialSubject.degree', 'credentialSubject.certificate']);
+  assert.deepEqual(result.credentials.map((item) => item.disclosedClaims[0].value), ['本科', '软件设计师']);
+  assert.deepEqual(result.credentials.map((item) => item.disclosedClaims[0].label), ['degree', 'certificate']);
   assert.equal(presentations.completed.outcome, 'valid');
   assert.equal(presentations.completed.items.length, 2);
   assert.equal(challenges.consumed, true);

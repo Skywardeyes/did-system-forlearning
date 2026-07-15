@@ -39,6 +39,10 @@ async function verify() {
   } catch (error) { message.value = error instanceof Error ? error.message : '验证失败' }
   finally { verifying.value = false }
 }
+function displayValue(value: string | number | boolean) {
+  if (typeof value === 'boolean') return value ? '是' : '否'
+  return String(value)
+}
 
 onMounted(() => { receive(); loadLedger().catch(() => undefined); timer = window.setInterval(receive, 2500) })
 onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
@@ -65,9 +69,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
       <section v-if="result?.credentials?.length" class="panel">
         <header class="panel-head"><div><p>PER-CREDENTIAL EVIDENCE</p><h2>逐张凭证结果</h2></div><span>{{ result.presentationId }}</span></header>
         <article v-for="item in result.credentials" :key="item.credentialId || item.issuerDid || ''" class="did-card">
-          <strong>{{ item.credentialType || '未声明凭证类型' }}</strong><small>{{ item.credentialId }}</small>
+          <strong>{{ item.templateName || item.credentialType || '未声明凭证类型' }}</strong><small>{{ item.credentialId }}</small>
           <p>签发方：{{ item.issuerDid }}</p><p :class="item.outcome === 'valid' ? 'success-text' : 'danger-text'">{{ item.outcome === 'valid' ? '验证通过' : '验证失败' }}</p>
-          <p>已披露：{{ item.disclosedPaths.join('、') || '无' }}</p><p v-if="item.failedChecks.length">失败项：{{ item.failedChecks.join('、') }}</p>
+          <div v-if="item.disclosedClaims?.length" class="disclosed-claims"><div v-for="claim in item.disclosedClaims" :key="claim.path"><span>{{ claim.label }}</span><strong>{{ displayValue(claim.value) }}</strong></div></div>
+          <p v-else>已披露字段：{{ item.disclosedPaths.join('、') || '无' }}</p><p v-if="item.failedChecks.length">失败项：{{ item.failedChecks.join('、') }}</p>
         </article>
       </section>
     </div>

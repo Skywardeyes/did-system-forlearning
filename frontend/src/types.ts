@@ -28,7 +28,9 @@ export interface CredentialTemplate { id: string; name: string; credentialType: 
 export interface VerificationCheck { key: string; label: string; passed: boolean; detail: string }
 export interface VerifiedPresentationCredential {
   credentialId: string | null; issuerDid: string | null; credentialType: string | null;
-  outcome: 'valid' | 'invalid'; disclosedPaths: string[]; failedChecks: string[];
+  templateName?: string | null; outcome: 'valid' | 'invalid'; disclosedPaths: string[];
+  disclosedClaims?: Array<{ path: string; key: string; label: string; value: string | number | boolean }>;
+  failedChecks: string[];
 }
 export interface VerificationResult {
   valid: boolean; presentationId?: string; credentialId: string | null; checkedAt: string;

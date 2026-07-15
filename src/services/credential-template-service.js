@@ -36,4 +36,14 @@ export class CredentialTemplateService {
       return { ...record, status: 'retired', retiredAt: at };
     });
   }
+
+  async delete(context, id) {
+    return this.unitOfWork.run(context, async (operation) => {
+      const record = await this.repository.findById(operation, id, { forUpdate: true });
+      if (!record) throw new Error('Credential template was not found');
+      if (record.status !== 'draft') throw new Error('Only a draft credential template can be deleted');
+      if (!await this.repository.deleteDraft(operation, id)) throw new Error('Credential template delete conflict');
+      return { id, deleted: true };
+    });
+  }
 }

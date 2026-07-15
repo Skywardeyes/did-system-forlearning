@@ -2,6 +2,7 @@ import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createClaimDigest, verifyCompactJwt, verifyCredentialSignature, verifyPayload } from '../crypto.js';
 
 const LEGACY_SD_PATHS = { name: 'credentialSubject.name', course: 'credentialSubject.course', completion_date: 'credentialSubject.completionDate' };
+const LEGACY_CLAIM_LABELS = { name: '姓名', course: '课程', completion_date: '完成日期' };
 const SAFE_CLAIM_NAME = /^[a-z][A-Za-z0-9_]{0,63}$/;
 const check = (key, label, passed, detail) => ({ key, label, passed: Boolean(passed), detail });
 const challengeHash = (value) => createHash('sha256').update(value).digest('hex');
@@ -130,25 +131,27 @@ export class V2VerificationService {
       let signature = false;
       try { const verified = key && verifyCompactJwt(issuerJwt, key.publicJwk); signature = Boolean(verified?.valid && verified.header?.alg === 'EdDSA' && verified.header?.typ === 'vc+sd-jwt'); payload = verified?.payload || payload; } catch { signature = false; }
       let disclosurePassed = format && new Set(disclosures).size === disclosures.length && payload?._sd_alg === 'sha-256' && Array.isArray(payload?._sd);
-      const paths = []; const claimNames = new Set();
+      const paths = []; const claimNames = new Set(); const disclosedClaims = [];
       if (disclosurePassed) for (const disclosure of disclosures) {
         try {
           const [salt, name, value] = JSON.parse(Buffer.from(disclosure, 'base64url').toString('utf8'));
           const path = LEGACY_SD_PATHS[name] || (SAFE_CLAIM_NAME.test(String(name)) ? `credentialSubject.${name}` : null);
           const digest = createHash('sha256').update(disclosure).digest('base64url');
           if (!salt || !path || value === undefined || claimNames.has(name) || !payload._sd.includes(digest)) { disclosurePassed = false; break; }
-          claimNames.add(name); paths.push(path);
+          claimNames.add(name); paths.push(path); disclosedClaims.push({ path, key: String(name), label: LEGACY_CLAIM_LABELS[name] || String(name), value });
         } catch { disclosurePassed = false; break; }
       }
-      let schemaPassed = true; let schemaDetail = 'Legacy credential without a versioned template';
+      let schemaPassed = true; let schemaDetail = 'Legacy credential without a versioned template'; let schema = null;
       if (payload?.schema_id || payload?.schema_version || payload?.schema_hash) {
-        const schema = this.publicTrustRepository && payload?.schema_id && Number.isInteger(Number(payload?.schema_version)) && payload?.schema_hash
+        schema = this.publicTrustRepository && payload?.schema_id && Number.isInteger(Number(payload?.schema_version)) && payload?.schema_hash
           ? await this.publicTrustRepository.resolveCredentialTemplate(operation, payload.schema_id, Number(payload.schema_version), payload.schema_hash)
           : null;
         const declaredFields = new Set((schema?.schema?.fields || []).map((field) => field.key));
         schemaPassed = Boolean(schema && schema.credentialType === payload?.vct && [...claimNames].every((name) => declaredFields.has(name)));
         schemaDetail = schemaPassed ? `Template ${schema.id} v${schema.version} and disclosed fields match` : 'Template version, digest, credential type, or disclosed field is not trusted';
       }
+      const labels = new Map((schema?.schema?.fields || []).map((field) => [field.key, field.label]));
+      for (const claim of disclosedClaims) claim.label = labels.get(claim.key) || claim.label;
       const now = Math.floor(Date.now() / 1000); const validity = Number.isFinite(payload?.nbf) && Number.isFinite(payload?.exp) && payload.nbf <= now && now <= payload.exp;
       const record = payload?.jti ? await this.credentialStatus(operation, payload.jti) : null; const status = effectiveStatus(record);
       const checks = [check('format', 'SD-JWT 格式', format, format ? '紧凑序列化结构完整' : '格式无效'),
@@ -160,7 +163,9 @@ export class V2VerificationService {
         check('validity', '凭证有效期', validity, validity && payload?.exp ? `有效至 ${new Date(payload.exp * 1000).toISOString()}` : '有效期无效'),
         check('credentialStatus', '凭证当前状态', status === 'active', status === 'active' ? '凭证当前有效' : `凭证状态为 ${status}`)];
       checks.splice(4, 0, check('credentialSchema', 'Credential schema', schemaPassed, schemaDetail));
-      return this.finish(operation, 'sd-jwt', payload?.jti || null, checks, paths, { format: 'sd-jwt' });
+      const trustedClaims = signature && disclosurePassed && schemaPassed ? disclosedClaims : [];
+      return this.finish(operation, 'sd-jwt', payload?.jti || null, checks, paths, { format: 'sd-jwt',
+        templateName: schema?.schema?.name || payload?.vct || null, disclosedClaims: structuredClone(trustedClaims) });
     });
   }
 
@@ -252,8 +257,9 @@ export class V2VerificationService {
       ];
       const valid = checks.every((item) => item.passed);
       const items = credentialResults.map((result, index) => ({ credentialId: result.credentialId,
-        issuerDid: parsed[index]?.iss || null, credentialType: parsed[index]?.vct || null, outcome: result.valid ? 'valid' : 'invalid',
-        disclosedPaths: result.disclosedPaths || [], failedChecks: result.checks.filter((item) => !item.passed).map((item) => item.key) }));
+        issuerDid: parsed[index]?.iss || null, credentialType: parsed[index]?.vct || null, templateName: result.templateName || null,
+        outcome: result.valid ? 'valid' : 'invalid', disclosedPaths: result.disclosedPaths || [],
+        disclosedClaims: result.disclosedClaims || [], failedChecks: result.checks.filter((item) => !item.passed).map((item) => item.key) }));
       if (this.presentationRepository) await this.presentationRepository.complete(operation, presentationId, valid ? 'valid' : 'invalid', items);
       await this.verificationLogRepository.append(operation, { id: randomUUID(), tenantId: operation.context.tenantId, credentialId: null,
         verificationKind: 'wallet-multi-sd-jwt', outcome: valid ? 'valid' : 'invalid', occurredAt,

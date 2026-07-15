@@ -23,6 +23,9 @@ async function logout() { await session.logout(); await router.replace('/login')
 watch(() => session.session?.tenant.id, (tenantId) => {
   if (tenantId) workspace.refresh().catch(() => undefined)
 }, { immediate: true })
+watch(() => session.session?.tenant.name, (organizationName) => {
+  document.title = organizationName ? `信证台 · ${organizationName}` : '信证台'
+}, { immediate: true })
 </script>
 
 <template>

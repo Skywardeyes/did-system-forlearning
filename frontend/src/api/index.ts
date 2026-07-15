@@ -45,6 +45,7 @@ export const credentialTemplateApi = {
   create: (body: object) => api<CredentialTemplate>('/api/v2/credential-templates', { method: 'POST', body: JSON.stringify(body) }),
   publish: (id: string) => api<CredentialTemplate>(`/api/v2/credential-templates/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' }),
   retire: (id: string) => api<CredentialTemplate>(`/api/v2/credential-templates/${encodeURIComponent(id)}/retire`, { method: 'POST', body: '{}' }),
+  remove: (id: string) => api<{ id: string; deleted: true }>(`/api/v2/credential-templates/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 }
 export const ledgerApi = {
   verification: () => api<Page<VerificationLog>>('/api/v2/verification-logs?page=1&pageSize=20'),

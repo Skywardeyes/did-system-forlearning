@@ -12,14 +12,15 @@ const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 const chainRecords = reactive<Record<string, ChainDidRecord>>({})
 const holderRequests = ref<Array<{ id: string; holderDid: string; holderDisplayName: string; message: string | null; status: string; createdAt: string }>>([])
 const didQuery = ref('')
-const didRole = ref('all')
 const didSort = ref('name')
 const requestQuery = ref('')
 const requestSort = ref('newest')
-const filteredDids = computed(() => [...workspace.dids]
-  .filter((item) => didRole.value === 'all' || item.role === didRole.value)
+const sortedDids = (role: 'issuer' | 'holder') => [...workspace.dids]
+  .filter((item) => item.role === role)
   .filter((item) => !didQuery.value.trim() || [item.name, item.did, item.method, item.status].some((value) => String(value).toLocaleLowerCase().includes(didQuery.value.trim().toLocaleLowerCase())))
-  .sort((a, b) => didSort.value === 'status' ? a.status.localeCompare(b.status) : didSort.value === 'role' ? a.role.localeCompare(b.role) : a.name.localeCompare(b.name, 'zh-CN')))
+  .sort((a, b) => didSort.value === 'status' ? a.status.localeCompare(b.status) : a.name.localeCompare(b.name, 'zh-CN'))
+const issuerDids = computed(() => sortedDids('issuer'))
+const holderDids = computed(() => sortedDids('holder'))
 const filteredRequests = computed(() => [...holderRequests.value]
   .filter((item) => !requestQuery.value.trim() || [item.holderDisplayName, item.holderDid, item.message, item.status].some((value) => String(value || '').toLocaleLowerCase().includes(requestQuery.value.trim().toLocaleLowerCase())))
   .sort((a, b) => (requestSort.value === 'newest' ? -1 : 1) * (+new Date(a.createdAt) - +new Date(b.createdAt))))
@@ -82,12 +83,18 @@ onMounted(loadHolderRequests)
       </div>
       <p class="message">{{ message }}</p>
     </section>
-    <section class="panel">
-      <header class="panel-head"><div><p>PUBLIC IDENTITIES</p><h2>DID 公开解析材料</h2></div><span>{{ workspace.dids.length }} 个</span></header>
-      <div class="toolbar"><label>搜索<input v-model="didQuery" type="search" placeholder="名称、DID 或方法"></label><label>角色<select v-model="didRole"><option value="all">全部角色</option><option value="issuer">Issuer</option><option value="holder">Holder</option></select></label><label>排序<select v-model="didSort"><option value="name">名称</option><option value="role">角色</option><option value="status">状态</option></select></label></div>
+    <section class="panel did-directory">
+      <header class="panel-head"><div><p>PUBLIC IDENTITIES</p><h2>DID 身份解析资料</h2></div><span>{{ workspace.dids.length }} 个</span></header>
+      <div class="toolbar"><label>搜索<input v-model="didQuery" type="search" placeholder="名称、DID 或方法"></label><label>排序<select v-model="didSort"><option value="name">名称</option><option value="status">状态</option></select></label></div>
+      <header class="identity-group-head"><div><strong>本组织创建的 Issuer DID</strong><small>机构持有并由 KMS 托管签名密钥</small></div><span>{{ issuerDids.length }} 个</span></header>
       <div class="table-wrap"><table><thead><tr><th>身份</th><th>DID 与托管</th><th>状态</th><th>操作</th></tr></thead><tbody>
-        <tr v-for="did in filteredDids" :key="did.id"><td><strong>{{ did.name }}</strong><small>{{ did.role }} · {{ did.method }} · v{{ did.version }}</small></td><td><small>{{ did.did }}</small><small>{{ did.keyCustody === 'holder_self_custody' ? '个人钱包自托管' : '机构 KMS 托管' }}</small></td><td><span class="status" :class="did.status">{{ did.status }}</span><small v-if="did.role === 'issuer'">链上：{{ chainRecords[did.id]?.registered ? `已登记 v${chainRecords[did.id].version}` : '未查询' }}</small></td><td class="actions"><button @click="dialog?.open('DID Document · 公开验证材料', did.document)">查看</button><button v-if="did.capabilities.rotateKey && did.status === 'active'" @click="action(did, 'rotate-key')">轮换</button><button v-if="did.role === 'issuer'" @click="loadChainState(did)">查链</button><button v-if="did.role === 'issuer' && did.status === 'active'" @click="chainAction(did, 'sync')">同步上链</button><button v-if="did.capabilities.deactivate && did.status === 'active'" class="danger" @click="action(did, 'deactivate')">停用</button></td></tr>
-        <tr v-if="!filteredDids.length"><td colspan="4" class="empty">暂无匹配 DID</td></tr>
+        <tr v-for="did in issuerDids" :key="did.id"><td><strong>{{ did.name }}</strong><small>Issuer · {{ did.method }} · v{{ did.version }}</small></td><td><small>{{ did.did }}</small><small>机构 KMS 托管</small></td><td><span class="status" :class="did.status">{{ did.status }}</span><small>链上：{{ chainRecords[did.id]?.registered ? `已登记 v${chainRecords[did.id].version}` : '未查询' }}</small></td><td class="actions"><button @click="dialog?.open('Issuer DID Document · 公开验证材料', did.document)">查看</button><button v-if="did.capabilities.rotateKey && did.status === 'active'" @click="action(did, 'rotate-key')">轮换</button><button @click="loadChainState(did)">查链</button><button v-if="did.status === 'active'" @click="chainAction(did, 'sync')">同步上链</button><button v-if="did.capabilities.deactivate && did.status === 'active'" class="danger" @click="action(did, 'deactivate')">停用</button></td></tr>
+        <tr v-if="!issuerDids.length"><td colspan="4" class="empty">暂无匹配的本组织 Issuer DID</td></tr>
+      </tbody></table></div>
+      <header class="identity-group-head holder"><div><strong>个人钱包发来的 Holder DID</strong><small>个人持有私钥，本组织只保存公开解析材料</small></div><span>{{ holderDids.length }} 个</span></header>
+      <div class="table-wrap"><table><thead><tr><th>持有人</th><th>DID 与来源</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        <tr v-for="did in holderDids" :key="did.id"><td><strong>{{ did.name }}</strong><small>Holder · {{ did.method }} · v{{ did.version }}</small></td><td><small>{{ did.did }}</small><small>来自个人钱包 · 私钥不上传</small></td><td><span class="status" :class="did.status">{{ did.status }}</span></td><td class="actions"><button @click="dialog?.open('Holder DID Document · 钱包公开材料', did.document)">查看</button></td></tr>
+        <tr v-if="!holderDids.length"><td colspan="4" class="empty">暂无匹配的钱包 Holder DID</td></tr>
       </tbody></table></div>
     </section>
     </div>

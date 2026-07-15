@@ -83,6 +83,11 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.issuer);
       return { status: 200, body: await this.credentialTemplateService[templateAction[2]](context, decodeURIComponent(templateAction[1])) };
     }
+    const templateDelete = url.pathname.match(/^\/api\/v2\/credential-templates\/([^/]+)$/);
+    if (request.method === 'DELETE' && templateDelete) {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 200, body: await this.credentialTemplateService.delete(context, decodeURIComponent(templateDelete[1])) };
+    }
     if (request.method === 'POST' && url.pathname === '/api/v2/auth/logout') {
       return { status: 200, body: await this.identityAccessService.logout(context) };
     }

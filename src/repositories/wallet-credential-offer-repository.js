@@ -14,9 +14,17 @@ export class WalletCredentialOfferRepository {
   }
 
   async listByHolder(connection, holderDid) {
-    const [rows] = await connection.execute(`SELECT id, tenant_id, credential_id, holder_did, status, created_at
-      FROM v2_wallet_credential_offers WHERE holder_did = ? AND status = 'pending' ORDER BY created_at DESC`, [holderDid]);
-    return rows.map((row) => ({ id: row.id, credentialId: row.credential_id, status: row.status, createdAt: new Date(row.created_at).toISOString() }));
+    const [rows] = await connection.execute(`SELECT offers.id, offers.credential_id, offers.status, offers.created_at,
+        credentials.issued_at, organizations.name AS issuer_name, templates.name AS template_name
+      FROM v2_wallet_credential_offers AS offers
+      INNER JOIN v2_credentials AS credentials ON credentials.id = offers.credential_id
+      INNER JOIN v2_organizations AS organizations ON organizations.id = offers.tenant_id
+      LEFT JOIN v2_credential_templates AS templates
+        ON templates.id = credentials.template_id AND templates.tenant_id = offers.tenant_id
+      WHERE offers.holder_did = ? AND offers.status = 'pending' ORDER BY offers.created_at DESC`, [holderDid]);
+    return rows.map((row) => ({ id: row.id, credentialId: row.credential_id, status: row.status,
+      issuerName: row.issuer_name, templateName: row.template_name || '可验证凭证',
+      issuedAt: new Date(row.issued_at || row.created_at).toISOString(), createdAt: new Date(row.created_at).toISOString() }));
   }
 
   async decide(connection, holderDid, offerId, decision, reason = null) {

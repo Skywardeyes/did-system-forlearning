@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import CredentialTable from '../components/CredentialTable.vue'
 import JsonDialog from '../components/JsonDialog.vue'
+import SearchSelect from '../components/SearchSelect.vue'
 import { credentialApi, credentialTemplateApi } from '../api'
 import { useWorkspaceStore } from '../stores/workspace'
 import type { CredentialSummary, CredentialTemplate, CredentialTemplateField } from '../types'
@@ -24,12 +25,11 @@ const issueForm = reactive({ issuerDid: '', holderDid: '', templateId: '', valid
 const draft = reactive({ name: '', credentialType: '', fields: [newDraftField()] as TemplateDraftField[] })
 const message = ref(''); const templateMessage = ref(''); const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 const templateQuery = ref(''); const templateSort = ref('newest')
-const issuerQuery = ref(''); const holderQuery = ref(''); const issueTemplateQuery = ref('')
 const filterBy = <T>(items: T[], query: string, values: (item: T) => unknown[]) => !query.trim() ? items : items.filter((item) => values(item).some((value) => String(value || '').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
 const filteredTemplates = computed(() => filterBy([...templates.value], templateQuery.value, (item) => [item.name, item.credentialType, item.status, item.version]).sort((a, b) => templateSort.value === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : b.version - a.version))
-const filteredIssuers = computed(() => filterBy(issuers.value, issuerQuery.value, (item) => [item.name, item.did]))
-const filteredHolders = computed(() => filterBy(holders.value, holderQuery.value, (item) => [item.name, item.did]))
-const filteredPublishedTemplates = computed(() => filterBy(publishedTemplates.value, issueTemplateQuery.value, (item) => [item.name, item.credentialType]))
+const issuerOptions = computed(() => issuers.value.map((item) => ({ value: item.did, label: `${item.name} · ${item.did}`, searchText: item.did })))
+const holderOptions = computed(() => holders.value.map((item) => ({ value: item.did, label: `${item.name} · ${item.did}`, searchText: item.did })))
+const templateOptions = computed(() => publishedTemplates.value.map((item) => ({ value: item.id, label: `${item.name} · V${item.version}`, searchText: item.credentialType })))
 
 function addField() { draft.fields.push(newDraftField()) }
 function removeField(index: number) { if (draft.fields.length > 1) draft.fields.splice(index, 1) }
@@ -50,15 +50,22 @@ async function createTemplate() {
     await credentialTemplateApi.create({ name: draft.name, credentialType: draft.credentialType,
       fields: draft.fields.map((field) => ({ key: field.key, label: field.label, type: field.type, required: field.required,
         ...(field.type === 'enum' ? { options: [...field.options] } : {}) })) })
-    await refreshTemplates(); templateMessage.value = '模板草稿已创建，发布后才能用于签发。'
+    draft.name = ''; draft.credentialType = ''; draft.fields.splice(0, draft.fields.length, newDraftField())
+    await refreshTemplates(); templateMessage.value = '模板草稿已创建，表单已清空；发布后才能用于签发。'
   } catch (error) { templateMessage.value = error instanceof Error ? error.message : '模板创建失败' }
 }
 async function templateAction(item: CredentialTemplate, action: 'publish' | 'retire') {
-  try { await credentialTemplateApi[action](item.id); await refreshTemplates(); templateMessage.value = action === 'publish' ? '模板已发布并冻结。' : '模板已停用签发，历史 VC 仍可验证。' }
+  if (action === 'retire' && !confirm(`确认撤销“${item.name}”的发布状态？撤销后不能继续签发，历史 VC 仍可验证。`)) return
+  try { await credentialTemplateApi[action](item.id); await refreshTemplates(); templateMessage.value = action === 'publish' ? '模板已发布并冻结。' : '模板已撤销发布，不能继续签发；历史 VC 仍可验证。' }
   catch (error) { templateMessage.value = error instanceof Error ? error.message : '模板状态更新失败' }
 }
+async function deleteTemplate(item: CredentialTemplate) {
+  if (!confirm(`确认删除草稿“${item.name} · V${item.version}”？此操作不可恢复。`)) return
+  try { await credentialTemplateApi.remove(item.id); await refreshTemplates(); templateMessage.value = '模板草稿已删除。' }
+  catch (error) { templateMessage.value = error instanceof Error ? error.message : '模板删除失败' }
+}
 async function issue() {
-  try { const result = await credentialApi.issue({ ...issueForm, validUntil: new Date(issueForm.validUntil).toISOString() }); dialog.value?.open('新签发动态 VC · 仅本次返回', result); await workspace.refresh(); message.value = '动态字段 VC 签发成功，交付消息已发送至 Holder 钱包。' }
+  try { if (!issueForm.issuerDid || !issueForm.holderDid || !issueForm.templateId) throw new Error('请依次选择签发方、持有人和凭证模板'); const result = await credentialApi.issue({ ...issueForm, validUntil: new Date(issueForm.validUntil).toISOString() }); dialog.value?.open('新签发动态 VC · 仅本次返回', result); await workspace.refresh(); message.value = '动态字段 VC 签发成功，交付消息已发送至 Holder 钱包。' }
   catch (error) { message.value = error instanceof Error ? error.message : '签发失败' }
 }
 async function reveal(record: CredentialSummary) { try { const result = await credentialApi.content(record.id, 'issuer_support'); dialog.value?.open('授权查看 · 已记录敏感访问', result.credential) } catch (error) { message.value = error instanceof Error ? error.message : '无权查看' } }
@@ -88,14 +95,14 @@ onMounted(refreshTemplates)
         <div class="actions"><button type="button" class="secondary" @click="addField">添加字段</button><button class="primary">创建模板草稿</button></div><p class="message">{{ templateMessage }}</p>
       </form>
       <div class="toolbar"><label>搜索模板<input v-model="templateQuery" type="search" placeholder="模板名称、凭证类型或状态"></label><label>排序<select v-model="templateSort"><option value="newest">版本：新到旧</option><option value="name">模板名称</option></select></label></div>
-      <div class="cards"><article v-for="item in filteredTemplates" :key="item.id" class="did-card"><strong>{{ item.name }} · V{{ item.version }}</strong><small>{{ item.credentialType }} · {{ item.status }}</small><p>{{ item.schema.fields.map((field) => field.label).join(' / ') }}</p><div class="actions"><button v-if="item.status === 'draft'" class="primary" @click="templateAction(item, 'publish')">发布模板</button><button v-if="item.status === 'published'" class="secondary" @click="templateAction(item, 'retire')">停止新签发</button></div></article><p v-if="!filteredTemplates.length" class="empty">暂无匹配模板</p></div>
+      <div class="cards"><article v-for="item in filteredTemplates" :key="item.id" class="did-card"><strong>{{ item.name }} · V{{ item.version }}</strong><small>{{ item.credentialType }} · {{ item.status }}</small><p>{{ item.schema.fields.map((field) => field.label).join(' / ') }}</p><div class="actions"><button v-if="item.status === 'draft'" class="primary" @click="templateAction(item, 'publish')">发布模板</button><button v-if="item.status === 'draft'" class="danger" @click="deleteTemplate(item)">删除草稿</button><button v-if="item.status === 'published'" class="danger" @click="templateAction(item, 'retire')">撤销发布</button><span v-if="item.status === 'retired'" class="status revoked">已撤销，历史凭证保留</span></div></article><p v-if="!filteredTemplates.length" class="empty">暂无匹配模板</p></div>
     </section>
 
     <div class="split credential-layout">
       <section class="panel form-panel"><header class="panel-head"><div><p>DYNAMIC CREDENTIAL ISSUANCE</p><h2>按模板签发 VC</h2></div></header>
-        <form @submit.prevent="issue"><label>搜索签发方<input v-model="issuerQuery" type="search" placeholder="输入机构名称或 DID"></label><label>Issuer<select v-model="issueForm.issuerDid" required><option value="" disabled>选择签发方</option><option v-for="did in filteredIssuers" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
-          <label>搜索持有人<input v-model="holderQuery" type="search" placeholder="输入姓名或 DID"></label><label>Holder<select v-model="issueForm.holderDid" required><option value="" disabled>选择持有人</option><option v-for="did in filteredHolders" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
-          <label>搜索凭证模板<input v-model="issueTemplateQuery" type="search" placeholder="输入模板名称或凭证类型"></label><label>凭证模板<select v-model="issueForm.templateId" required @change="resetClaims"><option value="" disabled>选择已发布模板</option><option v-for="item in filteredPublishedTemplates" :key="item.id" :value="item.id">{{ item.name }} · V{{ item.version }}</option></select></label>
+        <form @submit.prevent="issue"><SearchSelect v-model="issueForm.issuerDid" label="签发方 Issuer" placeholder="输入机构名称或 DID" :options="issuerOptions" />
+          <SearchSelect v-model="issueForm.holderDid" label="持有人 Holder" placeholder="输入姓名或 DID" :options="holderOptions" />
+          <SearchSelect v-model="issueForm.templateId" label="凭证模板" placeholder="输入模板名称或凭证类型" :options="templateOptions" @change="resetClaims" />
           <template v-for="field in selectedTemplate?.schema.fields || []" :key="field.key">
             <label v-if="field.type === 'boolean'">{{ field.label }}<select v-model="issueForm.claims[field.key]" :required="field.required"><option :value="true">是</option><option :value="false">否</option></select></label>
             <label v-else-if="field.type === 'enum'">{{ field.label }}<select v-model="issueForm.claims[field.key]" :required="field.required"><option value="" disabled>请选择</option><option v-for="option in field.options" :key="option" :value="option">{{ option }}</option></select></label>
