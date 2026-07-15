@@ -18,7 +18,7 @@ import { VerificationLogRepository } from './repositories/verification-log-repos
 import { SensitiveAccessLogRepository } from './repositories/sensitive-access-log-repository.js';
 import { VerifierChallengeRepository } from './repositories/verifier-challenge-repository.js';
 import { WalletCredentialOfferRepository } from './repositories/wallet-credential-offer-repository.js';
-import { MembershipRepository } from './repositories/organization-repository.js';
+import { MembershipRepository, OrganizationRepository } from './repositories/organization-repository.js';
 import { V2DidService } from './services/v2-did-service.js';
 import { V2CredentialService } from './services/v2-credential-service.js';
 import { V2DisclosureService } from './services/v2-disclosure-service.js';
@@ -79,7 +79,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, publicTrustRepository, kms: transactionalKms });
       const credentialService = new V2CredentialService({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository,
         credentialStatusEventRepository, disclosureMaterialRepository, walletOfferRepository, credentialTemplateRepository,
-        publicTrustRepository, kms: transactionalKms });
+        organizationRepository: new OrganizationRepository(), publicTrustRepository, kms: transactionalKms });
       const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
       const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
         credentialRepository, verificationLogRepository, verifierChallengeRepository, publicTrustRepository, presentationRepository });

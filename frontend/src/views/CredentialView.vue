@@ -6,24 +6,43 @@ import { credentialApi, credentialTemplateApi } from '../api'
 import { useWorkspaceStore } from '../stores/workspace'
 import type { CredentialSummary, CredentialTemplate, CredentialTemplateField } from '../types'
 
+type TemplateDraftField = {
+  id: string; key: string; label: string; type: string; required: boolean;
+  options: string[]; newOption: string;
+}
+
+const newDraftField = (): TemplateDraftField => ({
+  id: crypto.randomUUID(), key: '', label: '', type: 'string', required: true, options: [], newOption: '',
+})
+
 const workspace = useWorkspaceStore(); const templates = ref<CredentialTemplate[]>([])
 const issuers = computed(() => workspace.dids.filter((item) => item.role === 'issuer' && item.status === 'active'))
 const holders = computed(() => workspace.dids.filter((item) => item.role === 'holder' && item.status === 'active'))
 const publishedTemplates = computed(() => templates.value.filter((item) => item.status === 'published'))
 const selectedTemplate = computed(() => publishedTemplates.value.find((item) => item.id === issueForm.templateId) || null)
 const issueForm = reactive({ issuerDid: '', holderDid: '', templateId: '', validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 16), claims: {} as Record<string, string | number | boolean> })
-const draft = reactive({ name: '', credentialType: '', fields: [{ key: '', label: '', type: 'string', required: true, optionsText: '' }] as Array<{ key: string; label: string; type: string; required: boolean; optionsText: string }> })
+const draft = reactive({ name: '', credentialType: '', fields: [newDraftField()] as TemplateDraftField[] })
 const message = ref(''); const templateMessage = ref(''); const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 
-function addField() { draft.fields.push({ key: '', label: '', type: 'string', required: true, optionsText: '' }) }
+function addField() { draft.fields.push(newDraftField()) }
 function removeField(index: number) { if (draft.fields.length > 1) draft.fields.splice(index, 1) }
+function addEnumOption(field: TemplateDraftField) {
+  const option = field.newOption.trim()
+  if (!option) { templateMessage.value = '枚举选项不能为空'; return }
+  if (field.options.includes(option)) { templateMessage.value = `枚举选项“${option}”已经存在`; return }
+  if (field.options.length >= 50) { templateMessage.value = '每个枚举字段最多添加 50 个选项'; return }
+  field.options.push(option); field.newOption = ''; templateMessage.value = ''
+}
+function removeEnumOption(field: TemplateDraftField, index: number) { field.options.splice(index, 1) }
 function resetClaims() { issueForm.claims = {} }
 async function refreshTemplates() { templates.value = (await credentialTemplateApi.list()).items }
 async function createTemplate() {
   try {
+    const incompleteEnum = draft.fields.find((field) => field.type === 'enum' && field.options.length === 0)
+    if (incompleteEnum) throw new Error(`枚举字段“${incompleteEnum.label || incompleteEnum.key || '未命名字段'}”至少需要一个选项`)
     await credentialTemplateApi.create({ name: draft.name, credentialType: draft.credentialType,
       fields: draft.fields.map((field) => ({ key: field.key, label: field.label, type: field.type, required: field.required,
-        ...(field.type === 'enum' ? { options: field.optionsText.split(',').map((item) => item.trim()).filter(Boolean) } : {}) })) })
+        ...(field.type === 'enum' ? { options: [...field.options] } : {}) })) })
     await refreshTemplates(); templateMessage.value = '模板草稿已创建，发布后才能用于签发。'
   } catch (error) { templateMessage.value = error instanceof Error ? error.message : '模板创建失败' }
 }
@@ -48,10 +67,15 @@ onMounted(refreshTemplates)
       <header class="panel-head"><div><p>CREDENTIAL TEMPLATE REGISTRY</p><h2>组织自定义凭证模板</h2></div><span>发布后不可直接修改</span></header>
       <form @submit.prevent="createTemplate">
         <div class="form-row"><label>模板名称<input v-model="draft.name" required placeholder="例如 大学毕业证明"></label><label>凭证类型<input v-model="draft.credentialType" required placeholder="例如 UniversityGraduationCredential"></label></div>
-        <div v-for="(field, index) in draft.fields" :key="index" class="template-field-row">
+        <div v-for="(field, index) in draft.fields" :key="field.id" class="template-field-row">
           <label>字段键<input v-model="field.key" required placeholder="例如 major"></label><label>中文名称<input v-model="field.label" required placeholder="例如 专业"></label>
-          <label>类型<select v-model="field.type"><option value="string">文本</option><option value="number">数字</option><option value="boolean">布尔值</option><option value="date">日期</option><option value="datetime">日期时间</option><option value="enum">枚举</option></select></label>
-          <label v-if="field.type === 'enum'">枚举选项<input v-model="field.optionsText" placeholder="优秀,合格,不合格"></label>
+          <label>类型<select v-model="field.type" data-testid="template-field-type"><option value="string">文本</option><option value="number">数字</option><option value="boolean">布尔值</option><option value="date">日期</option><option value="datetime">日期时间</option><option value="enum">枚举</option></select></label>
+          <fieldset v-if="field.type === 'enum'" class="enum-editor">
+            <legend>枚举选项（逐项添加）</legend>
+            <div class="enum-option-input"><input v-model="field.newOption" placeholder="例如 本科" @keydown.enter.prevent="addEnumOption(field)"><button type="button" class="secondary" :disabled="!field.newOption.trim()" @click="addEnumOption(field)">新增选项</button></div>
+            <div v-if="field.options.length" class="enum-options"><span v-for="(option, optionIndex) in field.options" :key="option" class="enum-option-chip">{{ option }}<button type="button" :aria-label="`删除选项 ${option}`" @click="removeEnumOption(field, optionIndex)">×</button></span></div>
+            <small v-else>尚未添加选项；枚举字段至少需要一个选项。</small>
+          </fieldset>
           <label class="check-field"><input v-model="field.required" type="checkbox">必填</label><button type="button" class="secondary" @click="removeField(index)">删除字段</button>
         </div>
         <div class="actions"><button type="button" class="secondary" @click="addField">添加字段</button><button class="primary">创建模板草稿</button></div><p class="message">{{ templateMessage }}</p>

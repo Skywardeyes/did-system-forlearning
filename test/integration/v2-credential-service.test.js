@@ -40,13 +40,14 @@ class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payloa
 
 function createService({ template = null } = {}) {
   const dids = [
-    { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1 },
+    { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1, metadata: { name: '签发身份' } },
     { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1 },
   ];
   const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms(); const materials = new DisclosureMaterialRepository();
   return {
     service: new V2CredentialService({ unitOfWork: new UnitOfWork(), didRepository: new DidRepository(dids),
       didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, disclosureMaterialRepository: materials, kms,
+      organizationRepository: { async findById() { return { id: 'tenant-1', name: '上海大学' }; } },
       credentialTemplateRepository: template ? { async findById(_operation, id) { return id === template.id ? structuredClone(template) : null; } } : null }),
     credentialRepository, events, kms, materials,
   };
@@ -118,6 +119,8 @@ test('V2 issuer signs arbitrary template claims and emits a dynamic wallet packa
   assert.equal(issued.credential.credentialSchema.version, 3);
   const walletPackage = await service.createWalletPackage(context, issued.id);
   assert.equal(walletPackage.format, 'wallet-vc-package-v2');
+  assert.equal(walletPackage.display.issuerName, '上海大学');
+  assert.equal(walletPackage.display.credentialName, template.name);
   assert.deepEqual(walletPackage.display.fields.map((field) => field.key), ['degree', 'major']);
   assert.equal(walletPackage.sdJwt.disclosures['credentialSubject.gpa'], undefined);
   const payload = JSON.parse(Buffer.from(walletPackage.sdJwt.issuerJwt.split('.')[1], 'base64url').toString('utf8'));

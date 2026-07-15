@@ -79,9 +79,18 @@ input, select { min-height: 40px; padding: 8px 10px; }
 textarea { min-height: 350px; padding: 13px; resize: vertical; font-family: "Cascadia Code", Consolas, monospace; font-size: 12px; line-height: 1.55; }
 input:focus, select:focus, textarea:focus { border-color: var(--blue); box-shadow: 0 0 0 2px #1746d118; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.template-field-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; padding: 14px; border: 1px solid var(--line); background: #fafbfb; }
+.template-field-row .enum-editor { grid-column: 1 / -1; }
+.enum-option-input { display: grid; grid-template-columns: minmax(180px, 1fr) auto; gap: 8px; }
+.enum-options { display: flex; flex-wrap: wrap; gap: 7px; }
+.enum-option-chip { display: inline-flex; align-items: center; gap: 7px; padding: 5px 7px 5px 10px; color: #163a8f; background: #eef3ff; border: 1px solid #b9c9fa; font-size: 12px; font-weight: 700; }
+.enum-option-chip button { min-width: 24px; padding: 1px 5px; color: var(--danger); border: 0; background: transparent; font-size: 16px; line-height: 1; }
 .check-field { display: grid; grid-template-columns: 18px 1fr; align-items: center; }
 .check-field input { min-height: auto; }
 button { padding: 8px 11px; color: var(--ink); background: #fff; border: 1px solid #bdc6ca; }
+.button-link { display: inline-flex; align-items: center; justify-content: center; padding: 9px 13px; border: 1px solid #bdc6ca; color: var(--ink); background: #fff; text-decoration: none; font-weight: 750; }
+.button-link.primary { border-color: var(--blue); color: #fff; background: var(--blue); }
+.wallet-launch-panel { max-width: 780px; }
 button:hover { border-color: var(--blue); color: var(--blue); }
 button.primary { color: #fff; background: var(--blue); border-color: var(--blue); font-weight: 800; }
 button.danger { color: var(--danger); border-color: #e3aaa5; }
@@ -154,4 +163,7 @@ dialog pre { max-height: 65vh; margin: 0; padding: 18px; overflow: auto; white-s
   .dashboard-grid, .verify-grid, .disclosure-grid, .trust-flow { grid-template-columns: 1fr; }
   .trust-flow > div:not(:last-child)::after { content: "↓"; top: auto; right: 50%; bottom: -18px; }
   .form-row { grid-template-columns: 1fr; }
+  .template-field-row { grid-template-columns: 1fr; }
+  .template-field-row .enum-editor { grid-column: auto; }
+  .enum-option-input { grid-template-columns: 1fr; }
 }

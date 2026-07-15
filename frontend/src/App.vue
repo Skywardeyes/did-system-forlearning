@@ -15,7 +15,7 @@ const allNav = [
   { to: '/credentials', icon: '签', label: '凭证签发', roles: ['issuer_operator'] },
   { to: '/verify', icon: '验', label: '凭证验证', roles: ['verifier_operator'] },
   { to: '/wallet-verify', icon: '包', label: '钱包证明验证', roles: ['verifier_operator'] },
-  { to: '/disclosure', icon: '隐', label: '选择性披露', roles: ['holder_operator'] },
+  { to: '/wallet', icon: '钱', label: '打开个人钱包', roles: ['holder_operator'] },
   { to: '/audit', icon: '审', label: '审计中心', roles: ['tenant_admin'] },
   { to: '/organization', icon: '组', label: '组织与成员', roles: ['tenant_admin', 'workspace_owner'] },
 ]

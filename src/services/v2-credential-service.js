@@ -64,7 +64,8 @@ function toSummaryRecord(record) {
 
 export class V2CredentialService {
   constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, credentialStatusEventRepository,
-    disclosureMaterialRepository, walletOfferRepository = null, credentialTemplateRepository = null, publicTrustRepository = null, kms }) {
+    disclosureMaterialRepository, walletOfferRepository = null, credentialTemplateRepository = null, organizationRepository = null,
+    publicTrustRepository = null, kms }) {
     this.unitOfWork = unitOfWork;
     this.didRepository = didRepository;
     this.didKeyVersionRepository = didKeyVersionRepository;
@@ -73,6 +74,7 @@ export class V2CredentialService {
     this.disclosureMaterialRepository = disclosureMaterialRepository;
     this.walletOfferRepository = walletOfferRepository;
     this.credentialTemplateRepository = credentialTemplateRepository;
+    this.organizationRepository = organizationRepository;
     this.publicTrustRepository = publicTrustRepository;
     this.kms = kms;
   }
@@ -167,6 +169,9 @@ export class V2CredentialService {
     if (!validRoles(issuer, holder)) throw new Error('Issuer and holder must be active DIDs with the correct roles');
     const key = await this.didKeyVersionRepository.findByDidVersion(operation, issuer.id, issuer.keyVersion, { forUpdate: true });
     if (!key || key.status !== 'active') throw new Error('Issuer signing key is unavailable');
+    const organization = this.organizationRepository
+      ? await this.organizationRepository.findById(operation, operation.context.tenantId) : null;
+    const issuerName = organization?.name || issuer.metadata?.name || issuer.did;
 
     const issuedAt = new Date().toISOString();
     const id = `urn:uuid:${randomUUID()}`;
@@ -193,7 +198,7 @@ export class V2CredentialService {
       definition: { fields: normalized.fields, name: normalized.name, credentialType: normalized.credentialType, packageVersion: normalized.packageVersion },
     });
     let materials = null;
-    if (this.disclosureMaterialRepository) { materials = await this.createDisclosureMaterials(operation, record, key); await this.disclosureMaterialRepository.upsert(operation, materials); }
+    if (this.disclosureMaterialRepository) { materials = await this.createDisclosureMaterials(operation, record, key, issuerName); await this.disclosureMaterialRepository.upsert(operation, materials); }
     if (this.walletOfferRepository && materials) await this.walletOfferRepository.create(operation, {
       id: randomUUID(), credentialId: record.id, holderDid: holder.did, createdAt: issuedAt,
       delivery: this.walletPackage(record, materials),
@@ -212,7 +217,7 @@ export class V2CredentialService {
         disclosures: Object.fromEntries(Object.entries(material.sdJwtMaterial.disclosures).map(([path, entry]) => [path, entry.disclosure])) } };
   }
 
-  async createDisclosureMaterials(operation, record, key) {
+  async createDisclosureMaterials(operation, record, key, issuerName = record.credential.issuer) {
     const definition = record.definition;
     const issuedFields = definition.fields.filter((field) => Object.hasOwn(record.credential.credentialSubject, field.key));
     const claims = Object.fromEntries(issuedFields.map((field) => {
@@ -238,7 +243,7 @@ export class V2CredentialService {
     const signature = await this.kms.signBytes({ connection: operation.connection, keyId: key.kmsKeyId, bytes: Buffer.from(signingInput) });
     return { credentialId: record.id, tenantId: operation.context.tenantId, updatedAt: record.issuedAt,
       teachingMaterial: { claims, manifest, proof }, sdJwtMaterial: { issuerJwt: `${signingInput}.${signature}`, disclosures,
-        display: { packageVersion: definition.packageVersion, credentialName: definition.name, credentialType: definition.credentialType,
+        display: { packageVersion: definition.packageVersion, issuerName, credentialName: definition.name, credentialType: definition.credentialType,
           schemaId: record.templateId, schemaVersion: record.templateVersion, schemaHash: record.schemaHash,
           fields: issuedFields.map((field) => ({ ...field, path: safeDisclosurePath(field.key) })) } } };
   }

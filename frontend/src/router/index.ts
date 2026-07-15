@@ -5,7 +5,7 @@ import DashboardView from '../views/DashboardView.vue'
 import DidView from '../views/DidView.vue'
 import CredentialView from '../views/CredentialView.vue'
 import VerifyView from '../views/VerifyView.vue'
-import DisclosureView from '../views/DisclosureView.vue'
+import WalletLaunchView from '../views/WalletLaunchView.vue'
 import AuditView from '../views/AuditView.vue'
 import WalletVerifyView from '../views/WalletVerifyView.vue'
 import OrganizationView from '../views/OrganizationView.vue'
@@ -19,7 +19,8 @@ const router = createRouter({
     { path: '/dids', name: 'dids', component: DidView, meta: { title: 'DID 身份', roles: ['tenant_admin'] } },
     { path: '/credentials', name: 'credentials', component: CredentialView, meta: { title: '凭证签发', roles: ['issuer_operator'] } },
     { path: '/verify', name: 'verify', component: VerifyView, meta: { title: '凭证验证', roles: ['verifier_operator'] } },
-    { path: '/disclosure', name: 'disclosure', component: DisclosureView, meta: { title: '选择性披露', roles: ['holder_operator'] } },
+    { path: '/wallet', name: 'wallet', component: WalletLaunchView, meta: { title: '个人钱包', roles: ['holder_operator'] } },
+    { path: '/disclosure', redirect: '/wallet' },
     { path: '/audit', name: 'audit', component: AuditView, meta: { title: '审计中心', roles: ['tenant_admin'] } },
     { path: '/wallet-verify', name: 'wallet-verify', component: WalletVerifyView, meta: { title: '钱包证明验证', roles: ['verifier_operator'] } },
     { path: '/organization', name: 'organization', component: OrganizationView, meta: { title: '组织与成员', roles: ['tenant_admin', 'workspace_owner'] } },

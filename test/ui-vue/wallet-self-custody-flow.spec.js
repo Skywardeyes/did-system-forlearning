@@ -28,21 +28,44 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
 
   await call(request, session, '/api/v2/holder-dids/registration', registration);
   const issuer = await call(request, session, '/api/v2/dids', { name: 'UI dynamic issuer', role: 'issuer', method: 'example' });
-  const draft = await call(request, session, '/api/v2/credential-templates', { name: `UI Degree ${Date.now()}`,
+  const degreeTemplateName = `大学毕业证明 ${Date.now()}`;
+  const draft = await call(request, session, '/api/v2/credential-templates', { name: degreeTemplateName,
     credentialType: 'UiDegreeCredential', fields: [{ key: 'major', label: '专业', type: 'string', required: true }] });
   await call(request, session, `/api/v2/credential-templates/${draft.id}/publish`, {});
   const issued = await call(request, session, '/api/v2/credentials', { templateId: draft.id, issuerDid: issuer.did,
     holderDid: registration.did, claims: { major: '计算机科学' }, validUntil: new Date(Date.now() + 86_400_000).toISOString() });
   const delivery = await call(request, session, `/api/v2/credentials/${encodeURIComponent(issued.id)}/wallet-package`, {});
   expect(delivery.format).toBe('wallet-vc-package-v2');
+  expect(delivery.display.issuerName).toBe(session.tenant.name);
+
+  const skillTemplateName = `职业资格证明 ${Date.now()}`;
+  const skillDraft = await call(request, session, '/api/v2/credential-templates', { name: skillTemplateName,
+    credentialType: 'UiSkillCredential', fields: [{ key: 'certificate', label: '资格名称', type: 'string', required: true }] });
+  await call(request, session, `/api/v2/credential-templates/${skillDraft.id}/publish`, {});
+  const skillIssued = await call(request, session, '/api/v2/credentials', { templateId: skillDraft.id, issuerDid: issuer.did,
+    holderDid: registration.did, claims: { certificate: '软件工程师' }, validUntil: new Date(Date.now() + 86_400_000).toISOString() });
+  const skillDelivery = await call(request, session, `/api/v2/credentials/${encodeURIComponent(skillIssued.id)}/wallet-package`, {});
 
   await wallet.locator('[data-view-link="credentials"]').click();
   await wallet.locator('#package-input').fill(JSON.stringify(delivery));
   await wallet.locator('#import-package').click();
+  await wallet.locator('#package-input').fill(JSON.stringify(skillDelivery));
+  await wallet.locator('#import-package').click();
   await expect(wallet.locator('#wallet-credentials')).toContainText(issued.id);
+  await expect(wallet.locator('#wallet-credentials')).toContainText(`${session.tenant.name}·${degreeTemplateName}`);
   await wallet.locator('[data-view-link="disclosure"]').click();
+  await expect(wallet.locator('#credential-selections')).not.toContainText('专业');
+
+  await wallet.locator('#credential-search').fill(degreeTemplateName);
+  await wallet.locator('#credential-picker').selectOption(issued.id);
+  await wallet.locator('#add-credential').click();
+  await wallet.locator('#credential-search').fill(skillTemplateName);
+  await wallet.locator('#credential-picker').selectOption(skillIssued.id);
+  await wallet.locator('#add-credential').click();
+  await expect(wallet.locator('#credential-selections [data-credential]')).toHaveCount(2);
   await expect(wallet.locator('#credential-selections')).toContainText('专业');
-  await wallet.locator('#credential-selections input[type="checkbox"]').check();
+  await expect(wallet.locator('#credential-selections')).toContainText('资格名称');
+  for (const checkbox of await wallet.locator('#credential-selections input[type="checkbox"]').all()) await checkbox.check();
 
   const challenge = await call(request, session, '/api/v2/wallet-challenges', { domain: 'hr.example.com' });
   await wallet.locator('#challenge').fill(challenge.challenge);
