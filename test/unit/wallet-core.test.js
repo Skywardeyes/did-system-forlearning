@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertWalletPackage, createIdentity, createWalletPresentation, registrationPackage } from '../../wallet/wallet-core.js';
+import { assertWalletPackage, createIdentity, createWalletPresentation, registrationPackage, walletCredentialDisplay } from '../../wallet/wallet-core.js';
 
 test('wallet creates a non-extractable local Holder key and did:key registration package', async () => {
   const identity = await createIdentity('Local Holder');
@@ -17,6 +17,28 @@ test('wallet accepts dynamic v2 packages only when field metadata matches disclo
     sdJwt: { issuerJwt: 'header.payload.signature', disclosures: { 'credentialSubject.degree': 'disclosure-degree' } } };
   assert.equal(assertWalletPackage(value), value);
   assert.throws(() => assertWalletPackage({ ...value, display: { fields: [] } }), /field metadata/);
+});
+
+test('wallet builds readable and searchable credential labels from issuer, template and claim values', () => {
+  const value = { format: 'wallet-vc-package-v2', credentialId: 'urn:uuid:degree-1', holderDid: 'did:key:zholder', issuerDid: 'did:example:university',
+    credential: { type: ['VerifiableCredential', 'UniversityDegreeCredential'], credentialSubject: { id: 'did:key:zholder', major: '软件工程' }, proof: { proofValue: 'proof' } },
+    display: { issuerName: '上海大学', credentialName: '大学毕业证明', fields: [{ key: 'major', label: '专业', path: 'credentialSubject.major' }] },
+    sdJwt: { issuerJwt: 'header.payload.signature', disclosures: { 'credentialSubject.major': 'disclosure' } } };
+  const display = walletCredentialDisplay(value);
+  assert.equal(display.title, '上海大学·大学毕业证明');
+  assert.equal(display.optionLabel, '上海大学·大学毕业证明｜专业：软件工程');
+  assert.match(display.searchText, /上海大学/);
+  assert.match(display.searchText, /软件工程/);
+});
+
+test('legacy wallet packages get a readable credential name and searchable claim summary', () => {
+  const value = { format: 'wallet-vc-package-v1', credentialId: 'urn:uuid:legacy-1', holderDid: 'did:key:zholder', issuerDid: 'did:example:legacy',
+    credential: { type: ['VerifiableCredential', 'TrainingCompletionCredential'], credentialSubject: { id: 'did:key:zholder', course: '数字身份训练营' }, proof: { proofValue: 'proof' } },
+    sdJwt: { issuerJwt: 'header.payload.signature', disclosures: { 'credentialSubject.course': 'disclosure' } } };
+  const display = walletCredentialDisplay(value);
+  assert.equal(display.title, '培训结业凭证');
+  assert.equal(display.summary, '课程：数字身份训练营');
+  assert.match(display.searchText, /数字身份训练营/);
 });
 
 test('wallet signs a minimal SD-JWT presentation locally without including its private key', async () => {

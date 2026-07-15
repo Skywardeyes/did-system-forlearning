@@ -113,7 +113,7 @@ npm run test:ui:vue
 当前版本的已验证基线是：
 
 ```text
-Node 自动化测试：232/232
+Node 自动化测试：234/234
 Vue + 钱包 Chromium 端到端测试：4/4
 MySQL Schema：V11 healthy
 ```

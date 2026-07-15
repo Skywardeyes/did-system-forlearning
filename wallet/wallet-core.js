@@ -10,6 +10,38 @@ export const DISCLOSABLE_PATHS = Object.freeze([
   ['credentialSubject.completionDate', '完成日期'],
 ])
 
+const CREDENTIAL_TYPE_NAMES = Object.freeze({
+  TrainingCompletionCredential: '培训结业凭证',
+  UniversityDegreeCredential: '大学毕业证明',
+  UiDegreeCredential: '大学毕业证明',
+  SkillCredential: '职业资格证明',
+  UiSkillCredential: '职业资格证明',
+})
+
+export function walletPackageFields(item) {
+  return item?.display?.fields?.length ? item.display.fields
+    : DISCLOSABLE_PATHS.filter(([path]) => item?.sdJwt?.disclosures?.[path])
+      .map(([path, label], index) => ({ key: path.split('.').at(-1), path, label, order: index + 1 }))
+}
+
+export function walletCredentialDisplay(item) {
+  const rawType = item?.credential?.type?.at(-1) || ''
+  const credentialName = item?.display?.credentialName || CREDENTIAL_TYPE_NAMES[rawType] || '可验证凭证'
+  const issuerName = item?.display?.issuerName || item?.credential?.issuerName || ''
+  const title = issuerName && issuerName !== credentialName ? `${issuerName}·${credentialName}` : credentialName
+  const subject = item?.credential?.credentialSubject || {}
+  const details = walletPackageFields(item).map((field) => {
+    const key = field.key || String(field.path || '').split('.').at(-1)
+    const value = subject[key]
+    if (value === undefined || value === null || value === '') return null
+    const readable = typeof value === 'object' ? JSON.stringify(value) : String(value)
+    return `${field.label || key}：${readable.slice(0, 32)}`
+  }).filter(Boolean)
+  const summary = details.slice(0, 3).join('，')
+  const searchText = [title, summary, issuerName, rawType, item?.issuerDid, item?.credentialId, ...details].filter(Boolean).join(' ').toLocaleLowerCase()
+  return { title, summary, optionLabel: summary ? `${title}｜${summary}` : title, searchText }
+}
+
 export function stableStringify(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value)
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`

@@ -57,8 +57,12 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   await expect(wallet.locator('#credential-selections')).not.toContainText('专业');
 
   await wallet.locator('#credential-search').fill(degreeTemplateName);
+  await expect(wallet.locator('#credential-picker')).toContainText(`${session.tenant.name}·${degreeTemplateName}`);
+  await expect(wallet.locator('#credential-picker')).toContainText('专业：计算机科学');
   await wallet.locator('#credential-picker').selectOption(issued.id);
   await wallet.locator('#add-credential').click();
+  await wallet.locator('#credential-search').fill('软件工程师');
+  await expect(wallet.locator('#credential-picker')).toContainText(skillTemplateName);
   await wallet.locator('#credential-search').fill(skillTemplateName);
   await wallet.locator('#credential-picker').selectOption(skillIssued.id);
   await wallet.locator('#add-credential').click();
