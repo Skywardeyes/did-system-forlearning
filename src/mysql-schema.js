@@ -1,5 +1,5 @@
 export const MIN_SUPPORTED_SCHEMA_VERSION = 1;
-export const SUPPORTED_SCHEMA_VERSION = 14;
+export const SUPPORTED_SCHEMA_VERSION = 15;
 
 export async function assertSupportedSchema(pool, { requiredVersion = MIN_SUPPORTED_SCHEMA_VERSION } = {}) {
   const [rows] = await pool.execute('SELECT version FROM schema_migrations ORDER BY version DESC LIMIT 1');

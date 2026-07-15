@@ -35,7 +35,20 @@ async function submit() {
         <fieldset v-if="mode === 'register'">
           <legend>所属组织（一个账号只能绑定一个组织）</legend>
           <label>组织名称<input v-model="organizationName" maxlength="255" required></label>
-          <label>组织类型<select v-model="organizationType"><option value="education">教育机构</option><option value="enterprise">企业</option><option value="government">政府/事业单位</option><option value="other">其他</option></select></label>
+          <label>组织类型<select v-model="organizationType">
+            <option value="education">教育机构（学校/高校）</option>
+            <option value="healthcare">医疗卫生机构（医院/诊所）</option>
+            <option value="certification">资质认证与验证机构</option>
+            <option value="training">职业培训机构</option>
+            <option value="enterprise">企业/用人单位</option>
+            <option value="government">政府/事业单位</option>
+            <option value="industry_association">行业协会/商会</option>
+            <option value="human_resources">人力资源与招聘机构</option>
+            <option value="finance_insurance">金融/保险机构</option>
+            <option value="research">科研机构</option>
+            <option value="public_service">公共服务/社会组织</option>
+            <option value="other">其他</option>
+          </select></label>
         </fieldset>
         <button class="primary" :disabled="session.loading">{{ session.loading ? '处理中…' : submitLabel }}</button>
         <p class="message">{{ session.error }}</p>

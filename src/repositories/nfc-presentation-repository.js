@@ -6,9 +6,9 @@ export class NfcPresentationRepository {
   async create(connection, record) {
     const encrypted = this.encrypt(record.id, { challenge: record.challenge, domain: record.domain });
     await connection.execute(`INSERT INTO v2_nfc_presentation_transfers
-      (id, holder_did, challenge_hash, status, encrypted_payload, created_at, expires_at)
-      VALUES (?, ?, ?, 'issued', CAST(? AS JSON), ?, ?)`,
-    [record.id, record.holderDid, record.challengeHash, JSON.stringify(encrypted), sqlDate(record.createdAt), sqlDate(record.expiresAt)]);
+      (id, holder_did, target_organization_id, challenge_hash, status, encrypted_payload, created_at, expires_at)
+      VALUES (?, ?, ?, ?, 'issued', CAST(? AS JSON), ?, ?)`,
+    [record.id, record.holderDid, record.targetOrganizationId, record.challengeHash, JSON.stringify(encrypted), sqlDate(record.createdAt), sqlDate(record.expiresAt)]);
     return record;
   }
 
@@ -28,10 +28,10 @@ export class NfcPresentationRepository {
     return result.affectedRows === 1 ? { ...record, presentation, status: 'pending', submittedAt } : null;
   }
 
-  async latestPending(connection) {
+  async latestPending(connection, targetOrganizationId) {
     const [rows] = await connection.execute(`SELECT * FROM v2_nfc_presentation_transfers
-      WHERE status = 'pending' AND expires_at > UTC_TIMESTAMP(3)
-      ORDER BY submitted_at DESC LIMIT 1`);
+      WHERE target_organization_id = ? AND status = 'pending' AND expires_at > UTC_TIMESTAMP(3)
+      ORDER BY submitted_at DESC LIMIT 1`, [targetOrganizationId]);
     return rows[0] ? this.map(rows[0]) : null;
   }
 
@@ -46,7 +46,8 @@ export class NfcPresentationRepository {
   map(row) {
     const envelope = typeof row.encrypted_payload === 'string' ? JSON.parse(row.encrypted_payload) : row.encrypted_payload;
     const payload = this.envelopeCrypto.decryptJson(envelope, { recordType: 'v2-nfc-presentation-transfer', recordId: row.id });
-    return { id: row.id, holderDid: row.holder_did, challengeHash: row.challenge_hash, status: row.status,
+    return { id: row.id, holderDid: row.holder_did, targetOrganizationId: row.target_organization_id,
+      challengeHash: row.challenge_hash, status: row.status,
       challenge: payload.challenge, domain: payload.domain, presentation: payload.presentation || null,
       createdAt: new Date(row.created_at).toISOString(), expiresAt: new Date(row.expires_at).toISOString(),
       submittedAt: row.submitted_at ? new Date(row.submitted_at).toISOString() : null };

@@ -88,7 +88,7 @@ export class V2Api {
     }
     if (request.method === 'GET' && url.pathname === '/api/v2/nfc/presentations/latest') {
       await this.accessService.requireAnyRole(context, roles.verifier);
-      return { status: 200, body: await this.nfcPresentationService.latest() };
+      return { status: 200, body: await this.nfcPresentationService.latest(context) };
     }
     const nfcVerify = url.pathname.match(/^\/api\/v2\/nfc\/presentations\/([^/]+)\/verify$/);
     if (request.method === 'POST' && nfcVerify) {

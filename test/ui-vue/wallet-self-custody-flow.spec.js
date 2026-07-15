@@ -21,6 +21,12 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   } });
   expect(sessionResponse.ok()).toBeTruthy();
   const session = await sessionResponse.json();
+  const otherSessionResponse = await request.post(`${apiBase}/api/v2/auth/register`, { data: {
+    displayName: '其他验证方', email: `other-verifier-${unique}@example.test`, password: `Other-${unique}-A1`,
+    organization: { name: `其他验证机构 ${unique}`, organizationType: 'certification' },
+  } });
+  expect(otherSessionResponse.ok()).toBeTruthy();
+  const otherSession = await otherSessionResponse.json();
   await page.addInitScript((value) => sessionStorage.setItem('did-vc-session-v2', JSON.stringify(value)), session);
 
   const wallet = await browser.newPage();
@@ -85,6 +91,7 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   await expect(wallet.locator('#wallet-credentials')).toContainText(issued.id);
   await expect(wallet.locator('#wallet-credentials')).toContainText(`${session.tenant.name}·${degreeTemplateName}`);
   await wallet.locator('[data-view-link="disclosure"]').click();
+  await wallet.locator('#verifier-organization-picker').selectOption(session.tenant.id);
   await expect(wallet.locator('#credential-selections')).not.toContainText('专业');
 
   await wallet.locator('#credential-search').fill(degreeTemplateName);
@@ -108,7 +115,8 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   expect(presentationText).not.toContain('privateKey');
   expect(presentationText).toContain('WalletBoundMultiSdJwtPresentation2026');
   await wallet.locator('#nfc-touch').click({ force: true });
-  await expect(wallet.locator('#nfc-message')).toContainText('证明已到达验证方入口');
+  await expect(wallet.locator('#nfc-message')).toContainText(`证明已发送给“${session.tenant.name}”`);
+  expect(await call(request, otherSession, '/api/v2/nfc/presentations/latest', undefined, 'get')).toBeNull();
 
   await page.goto('/wallet-verify');
   await expect(page.getByText('已收到一份选择性披露证明')).toBeVisible();

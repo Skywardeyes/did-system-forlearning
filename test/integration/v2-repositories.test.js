@@ -94,7 +94,7 @@ test('disclosure material and verification evidence repositories encrypt sensiti
   assert.doesNotMatch(JSON.stringify(logInsert.params), /sensitive|credentialSubject\.course/);
 });
 
-test('schema compatibility accepts V1 through V14 during staged repository migration', async () => {
+test('schema compatibility accepts V1 through V15 during staged repository migration', async () => {
   const poolAt = (version) => ({ execute: async () => [[{ version }]] });
   await assert.doesNotReject(() => assertSupportedSchema(poolAt(1)));
   await assert.doesNotReject(() => assertSupportedSchema(poolAt(2)));
@@ -110,8 +110,9 @@ test('schema compatibility accepts V1 through V14 during staged repository migra
   await assert.doesNotReject(() => assertSupportedSchema(poolAt(12)));
   await assert.doesNotReject(() => assertSupportedSchema(poolAt(13)));
   await assert.doesNotReject(() => assertSupportedSchema(poolAt(14)));
-  await assert.rejects(() => assertSupportedSchema(poolAt(13), { requiredVersion: 14 }), { code: 'SCHEMA_VERSION_UNSUPPORTED' });
-  await assert.rejects(() => assertSupportedSchema(poolAt(15)), { code: 'SCHEMA_VERSION_UNSUPPORTED' });
+  await assert.doesNotReject(() => assertSupportedSchema(poolAt(15)));
+  await assert.rejects(() => assertSupportedSchema(poolAt(14), { requiredVersion: 15 }), { code: 'SCHEMA_VERSION_UNSUPPORTED' });
+  await assert.rejects(() => assertSupportedSchema(poolAt(16)), { code: 'SCHEMA_VERSION_UNSUPPORTED' });
 });
 
 test('credential list query neither selects nor decrypts encrypted payloads', async () => {

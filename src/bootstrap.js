@@ -55,7 +55,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 14 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 15 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -99,7 +99,8 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const organizationGovernanceService = new OrganizationGovernanceService({ pool, repository: new OrganizationGovernanceRepository() });
       const holderDidDirectoryService = new HolderDidDirectoryService({ pool, repository: new HolderDidDirectoryRepository(), didService });
       const nfcPresentationService = new NfcPresentationService({ pool,
-        repository: new NfcPresentationRepository({ envelopeCrypto }), holderDidDirectoryRepository: new HolderDidDirectoryRepository(), verificationService });
+        repository: new NfcPresentationRepository({ envelopeCrypto }), holderDidDirectoryRepository: new HolderDidDirectoryRepository(),
+        organizationRepository: new OrganizationRepository(), verificationService });
       const walletAccountService = new WalletAccountService({ pool, repository: new WalletAccountRepository() });
       const holderOrganizationRequestService = new HolderOrganizationRequestService({ pool,
         repository: new HolderOrganizationRequestRepository(), holderDidDirectoryService });
