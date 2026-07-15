@@ -12,21 +12,48 @@ async function call(request, session, path, data = undefined, method = 'post') {
 }
 
 test('personal wallet imports a dynamic VC and creates a holder-bound combination', async ({ browser, page, request }) => {
-  const sessionResponse = await request.post(`${apiBase}/api/v2/session/local`, { data: {} });
+  const unique = Date.now();
+  const organizationPassword = `Organization-${unique}-A1`;
+  const walletPassword = `Wallet-${unique}-A1`;
+  const sessionResponse = await request.post(`${apiBase}/api/v2/auth/register`, { data: {
+    displayName: '演示组织负责人', email: `organization-${unique}@example.test`, password: organizationPassword,
+    organization: { name: `演示大学 ${unique}`, organizationType: 'education' },
+  } });
+  expect(sessionResponse.ok()).toBeTruthy();
   const session = await sessionResponse.json();
   await page.addInitScript((value) => sessionStorage.setItem('did-vc-session-v2', JSON.stringify(value)), session);
 
   const wallet = await browser.newPage();
-  await wallet.route('**/api/**', (route) => route.abort());
+  await wallet.addInitScript((value) => { globalThis.WALLET_API_BASE = value; }, apiBase);
   await wallet.goto(walletBase);
-  await wallet.locator('#create-identity').click();
-  await expect(wallet.locator('#registration-output')).not.toHaveValue('');
-  const registrationText = await wallet.locator('#registration-output').inputValue();
-  const registration = JSON.parse(registrationText);
-  expect(registration.document.verificationMethod[0].publicKeyJwk.d).toBeUndefined();
-  expect(registrationText).not.toContain('privateKey');
+  await wallet.locator('#auth-register-tab').click();
+  await wallet.locator('#auth-name').fill('张同学');
+  await wallet.locator('#auth-email').fill(`wallet-${Date.now()}@example.test`);
+  await wallet.locator('#auth-password').fill(walletPassword);
+  await wallet.locator('#auth-submit').click();
+  await expect(wallet.locator('#wallet-shell')).toBeVisible();
 
-  await call(request, session, '/api/v2/holder-dids/registration', registration);
+  await wallet.locator('#identity-name').fill('学习身份');
+  await wallet.locator('#create-identity').click();
+  await wallet.locator('#identity-name').fill('职业身份');
+  await wallet.locator('#create-identity').click();
+  await expect(wallet.locator('#identity-list tbody tr')).toHaveCount(2);
+  await expect(wallet.locator('#identity-list')).toContainText('学习身份');
+  await expect(wallet.locator('#identity-list')).toContainText('职业身份');
+  await expect(wallet.locator('#registration-output')).toHaveCount(0);
+
+  const learningIdentityId = await wallet.locator('#request-identity-picker option').filter({ hasText: '学习身份' }).getAttribute('value');
+  await wallet.locator('#request-identity-picker').selectOption(learningIdentityId);
+  await wallet.locator('#organization-picker').selectOption(session.tenant.id);
+  await wallet.locator('#organization-request-message').fill('申请签发学习凭证');
+  await wallet.locator('#send-organization-request').click();
+  await expect(wallet.locator('#organization-request-status')).toContainText('已将“学习身份”发送给组织');
+  const requests = await call(request, session, '/api/v2/holder-requests', undefined, 'get');
+  const holderRequest = requests.items.find((item) => item.holderDisplayName === '学习身份');
+  expect(holderRequest).toBeTruthy();
+  await call(request, session, `/api/v2/holder-requests/${holderRequest.id}/accept`, {});
+  const registration = { did: holderRequest.holderDid };
+  await wallet.locator('#identity-list tbody tr').filter({ hasText: '学习身份' }).getByRole('button', { name: '切换到此 DID' }).click();
   const issuer = await call(request, session, '/api/v2/dids', { name: 'UI dynamic issuer', role: 'issuer', method: 'example' });
   const degreeTemplateName = `大学毕业证明 ${Date.now()}`;
   const draft = await call(request, session, '/api/v2/credential-templates', { name: degreeTemplateName,
@@ -49,8 +76,12 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   await wallet.locator('[data-view-link="credentials"]').click();
   await wallet.locator('#package-input').fill(JSON.stringify(delivery));
   await wallet.locator('#import-package').click();
+  await expect(wallet.locator('#package-message')).toContainText('VC 已导入本地钱包');
+  await expect(wallet.locator('#package-input')).toHaveValue('');
   await wallet.locator('#package-input').fill(JSON.stringify(skillDelivery));
   await wallet.locator('#import-package').click();
+  await expect(wallet.locator('#package-message')).toContainText('VC 已导入本地钱包');
+  await expect(wallet.locator('#package-input')).toHaveValue('');
   await expect(wallet.locator('#wallet-credentials')).toContainText(issued.id);
   await expect(wallet.locator('#wallet-credentials')).toContainText(`${session.tenant.name}·${degreeTemplateName}`);
   await wallet.locator('[data-view-link="disclosure"]').click();
@@ -71,19 +102,19 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   await expect(wallet.locator('#credential-selections')).toContainText('资格名称');
   for (const checkbox of await wallet.locator('#credential-selections input[type="checkbox"]').all()) await checkbox.check();
 
-  const challenge = await call(request, session, '/api/v2/wallet-challenges', { domain: 'hr.example.com' });
-  await wallet.locator('#challenge').fill(challenge.challenge);
-  await wallet.locator('#domain').fill(challenge.domain);
   await wallet.locator('#create-presentation').click();
+  await expect(wallet.locator('#presentation-message')).toContainText('组合披露证明已在本地生成');
   const presentationText = await wallet.locator('#presentation-output').inputValue();
   expect(presentationText).not.toContain('privateKey');
   expect(presentationText).toContain('WalletBoundMultiSdJwtPresentation2026');
+  await wallet.locator('#nfc-touch').click({ force: true });
+  await expect(wallet.locator('#nfc-message')).toContainText('证明已到达验证方入口');
 
   await page.goto('/wallet-verify');
-  await page.locator('textarea').last().fill(presentationText);
-  await page.getByRole('button', { name: '逐张验证并核验 Holder 组合签名' }).click();
-  await expect(page.locator('.message')).toContainText('组合出示验证通过');
-  await expect(page.getByText('逐张凭证验证结果')).toBeVisible();
+  await expect(page.getByText('已收到一份选择性披露证明')).toBeVisible();
+  await page.getByRole('button', { name: '验证', exact: true }).click();
+  await expect(page.locator('.message')).toContainText('验证通过');
+  await expect(page.getByText('逐张凭证结果')).toBeVisible();
   await expect(page.getByText('组合验证台账')).toBeVisible();
   await wallet.close();
 });

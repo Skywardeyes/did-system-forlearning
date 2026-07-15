@@ -9,6 +9,7 @@ const inOneDay = new Date(now.getTime() + 86_400_000).toISOString();
 class UnitOfWork { async run(contextValue, callback) { return callback({ context: contextValue, connection: {} }); } }
 class DidRepository {
   constructor(records) { this.records = new Map(records.map((record) => [record.id, structuredClone(record)])); }
+  async findById(_operation, id) { return structuredClone(this.records.get(id) || null); }
   async findByDid(_operation, did) { return [...this.records.values()].find((record) => record.did === did) || null; }
   async getForUpdate(_operation, id) { return structuredClone(this.records.get(id) || null); }
 }
@@ -28,7 +29,7 @@ class CredentialRepository {
     const current = this.records.get(record.id); assert.equal(current.rowVersion, expectedRowVersion);
     const saved = { ...structuredClone(record), rowVersion: expectedRowVersion + 1 }; this.records.set(record.id, saved); return saved;
   }
-  async list() { return { total: this.records.size, items: [...this.records.values()].map(structuredClone) }; }
+  async list() { return { total: this.records.size, items: [...this.records.values()].map((record) => structuredClone(record)) }; }
 }
 class EventRepository { constructor() { this.events = []; } async append(_operation, event) { this.events.push(structuredClone(event)); return event; } }
 class DisclosureMaterialRepository {
@@ -41,7 +42,7 @@ class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payloa
 function createService({ template = null } = {}) {
   const dids = [
     { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1, metadata: { name: '签发身份' } },
-    { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1 },
+    { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1, metadata: { name: '张同学' } },
   ];
   const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms(); const materials = new DisclosureMaterialRepository();
   return {
@@ -126,4 +127,19 @@ test('V2 issuer signs arbitrary template claims and emits a dynamic wallet packa
   const payload = JSON.parse(Buffer.from(walletPackage.sdJwt.issuerJwt.split('.')[1], 'base64url').toString('utf8'));
   assert.equal(payload.schema_id, template.id);
   assert.equal(payload.schema_version, 3);
+});
+
+test('credential list exposes a readable issuance log without returning credential bodies', async () => {
+  const template = { id: 'template-1', name: '大学毕业证明', credentialType: 'UniversityDegreeCredential', version: 2,
+    status: 'published', schemaHash: 'b'.repeat(64), schema: { fields: [{ key: 'major', label: '专业', type: 'string', required: true, order: 1 }] } };
+  const { service } = createService({ template });
+  await service.issueCredential(context, { templateId: template.id, issuerDid: 'did:example:issuer', holderDid: 'did:example:holder',
+    claims: { major: '计算机科学' }, validUntil: inOneDay });
+  const page = await service.listCredentials(context, { page: 1, pageSize: 20 });
+  assert.equal(page.items[0].templateName, '大学毕业证明');
+  assert.equal(page.items[0].credentialType, 'UniversityDegreeCredential');
+  assert.equal(page.items[0].issuerName, '签发身份');
+  assert.equal(page.items[0].holderName, '张同学');
+  assert.equal(page.items[0].holderDid, 'did:example:holder');
+  assert.equal('credential' in page.items[0], false);
 });

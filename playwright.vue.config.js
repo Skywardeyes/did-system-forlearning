@@ -13,7 +13,7 @@ export default defineConfig({
     {
       command: 'node --env-file=.env test/helpers/playwright-vue-backend.js',
       url: `http://127.0.0.1:${apiPort}/health`, reuseExistingServer: false, timeout: 30_000,
-      env: { PLAYWRIGHT_VUE_API_PORT: apiPort },
+      env: { PLAYWRIGHT_VUE_API_PORT: apiPort, WALLET_ORIGIN: `http://127.0.0.1:${walletPort}` },
     },
     {
       command: 'npm --prefix frontend run dev',

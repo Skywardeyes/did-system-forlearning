@@ -50,7 +50,7 @@ function toPublicRecord(record) {
   };
 }
 
-function toSummaryRecord(record) {
+function toSummaryRecord(record, display = {}) {
   return {
     id: record.id, status: record.status, issuerDidId: record.issuerDidId, holderDidId: record.holderDidId,
     validFrom: record.validFrom, validUntil: record.validUntil, issuedAt: record.issuedAt,
@@ -58,6 +58,10 @@ function toSummaryRecord(record) {
     replacedAt: record.replacedAt, replacesCredentialId: record.replacesCredentialId,
     replacedByCredentialId: record.replacedByCredentialId, rowVersion: record.rowVersion,
     templateId: record.templateId || null, templateVersion: record.templateVersion || null, schemaHash: record.schemaHash || null,
+    templateName: display.templateName || (record.templateId ? '未命名凭证模板' : '通用凭证'),
+    credentialType: display.credentialType || null,
+    issuerName: display.issuerName || '未命名签发方', issuerDid: display.issuerDid || null,
+    holderName: display.holderName || '未命名持有人', holderDid: display.holderDid || null,
     contentProtected: true, selectiveDisclosureAvailable: true, sdJwtAvailable: true,
   };
 }
@@ -90,7 +94,21 @@ export class V2CredentialService {
     assertTenant(context);
     return this.unitOfWork.run(context, async (operation) => {
       const result = await this.credentialRepository.list(operation, query);
-      return { ...result, items: result.items.map(toSummaryRecord) };
+      const items = await Promise.all(result.items.map(async (record) => {
+        const [issuer, holder, template] = await Promise.all([
+          this.didRepository.findById(operation, record.issuerDidId),
+          this.didRepository.findById(operation, record.holderDidId),
+          record.templateId && this.credentialTemplateRepository
+            ? this.credentialTemplateRepository.findById(operation, record.templateId)
+            : null,
+        ]);
+        return toSummaryRecord(record, {
+          templateName: template?.name, credentialType: template?.credentialType,
+          issuerName: issuer?.metadata?.name, issuerDid: issuer?.did,
+          holderName: holder?.metadata?.name, holderDid: holder?.did,
+        });
+      }));
+      return { ...result, items };
     });
   }
 

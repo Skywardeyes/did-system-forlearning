@@ -179,11 +179,12 @@ export function createAppServer(activeService, { logService = noOpLogService, v2
     : activeService;
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
     try {
-    if (url.pathname.startsWith('/api/v2/wallet-inbox/') || url.pathname.startsWith('/api/v2/wallet/')
+    if (url.pathname.startsWith('/api/v2/wallet-inbox/') || url.pathname.startsWith('/api/v2/wallet/') || url.pathname.startsWith('/api/v2/wallet-auth/')
+      || url.pathname.startsWith('/api/v2/nfc/')
       || url.pathname.startsWith('/api/v2/auth/') || url.pathname === '/api/v2/session/local' || url.pathname === '/api/v2/holder-dids/registration') {
-      response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5176');
+      response.setHeader('Access-Control-Allow-Origin', process.env.WALLET_ORIGIN || 'http://127.0.0.1:5176');
       response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-      response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
+      response.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
       if (request.method === 'OPTIONS') { response.writeHead(204); response.end(); return; }
     }
     const secureRequest = Boolean(request.socket?.encrypted) || String(request.headers['x-forwarded-proto'] || '').toLowerCase() === 'https';

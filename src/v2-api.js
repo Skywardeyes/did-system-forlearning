@@ -1,9 +1,8 @@
 const roles = Object.freeze({
   administrator: ['tenant_admin'],
   issuer: ['issuer_operator'],
-  holder: ['holder_operator'],
   verifier: ['verifier_operator'],
-  reader: ['tenant_admin', 'issuer_operator', 'holder_operator', 'verifier_operator'],
+  reader: ['tenant_admin', 'issuer_operator', 'verifier_operator'],
   sensitiveReader: ['credential_data_reader'],
 });
 import { localDemoWalletIdentity } from './demo-wallet-identity.js';
@@ -12,7 +11,8 @@ export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
     credentialAccessService, identityAccessService = null, organizationGovernanceService = null, holderDidDirectoryService = null,
     credentialTemplateService = null,
-    localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null }) {
+    localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null, nfcPresentationService = null,
+    walletAccountService = null, holderOrganizationRequestService = null }) {
     this.authenticator = authenticator; this.accessService = accessService; this.didService = didService;
     this.credentialService = credentialService; this.disclosureService = disclosureService;
     this.verificationService = verificationService; this.localSessionService = localSessionService; this.logService = logService;
@@ -21,11 +21,29 @@ export class V2Api {
     this.organizationGovernanceService = organizationGovernanceService;
     this.holderDidDirectoryService = holderDidDirectoryService;
     this.credentialTemplateService = credentialTemplateService;
+    this.nfcPresentationService = nfcPresentationService;
+    this.walletAccountService = walletAccountService;
+    this.holderOrganizationRequestService = holderOrganizationRequestService;
   }
 
   async handle(request, url, requestId, readJson) {
     if (request.method === 'POST' && url.pathname === '/api/v2/auth/register') return { status: 201, body: await this.identityAccessService.register(await readJson(request)) };
     if (request.method === 'POST' && url.pathname === '/api/v2/auth/login') return { status: 200, body: await this.identityAccessService.login(await readJson(request)) };
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-auth/register') return { status: 201, body: await this.walletAccountService.register(await readJson(request)) };
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-auth/login') return { status: 200, body: await this.walletAccountService.login(await readJson(request)) };
+    if (request.method === 'GET' && url.pathname === '/api/v2/wallet-auth/me') return { status: 200, body: (await this.walletAccountService.authenticate(request)).account };
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet-auth/logout') return { status: 200, body: await this.walletAccountService.logout(request) };
+    if (request.method === 'GET' && url.pathname === '/api/v2/wallet/organizations') return { status: 200, body: await this.holderOrganizationRequestService.listOrganizations(url.searchParams.get('search') || '') };
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet/holder-requests') {
+      const wallet = await this.walletAccountService.authenticate(request);
+      return { status: 201, body: await this.holderOrganizationRequestService.submit(wallet.account, await readJson(request)) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet/holder-dids') return { status: 201, body: await this.holderDidDirectoryService.registerFromWallet(await readJson(request)) };
+    if (request.method === 'POST' && url.pathname === '/api/v2/nfc/challenges') return { status: 201, body: await this.nfcPresentationService.issueChallenge(await readJson(request)) };
+    const nfcSubmit = url.pathname.match(/^\/api\/v2\/nfc\/presentations\/([^/]+)\/submit$/);
+    if (request.method === 'POST' && nfcSubmit) return { status: 200, body: await this.nfcPresentationService.submit(decodeURIComponent(nfcSubmit[1]), await readJson(request)) };
+    const nfcQr = url.pathname.match(/^\/api\/v2\/nfc\/presentations\/([^/]+)\/qr$/);
+    if (request.method === 'GET' && nfcQr) return { status: 200, body: await this.nfcPresentationService.qrCode(decodeURIComponent(nfcQr[1])) };
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/challenge') return { status: 201, body: await this.walletInboxService.issueChallenge((await readJson(request)).holderDid) };
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/offers') return { status: 200, body: await this.walletInboxService.list(await readJson(request)) };
     const inboxDecision = url.pathname.match(/^\/api\/v2\/wallet-inbox\/offers\/([^/]+)\/(claim|reject)$/);
@@ -65,58 +83,31 @@ export class V2Api {
       await this.accessService.requireAnyRole(context, roles.issuer);
       return { status: 200, body: await this.credentialTemplateService[templateAction[2]](context, decodeURIComponent(templateAction[1])) };
     }
-    if (request.method === 'GET' && url.pathname === '/api/v2/platform/me') {
-      return { status: 200, body: await this.organizationGovernanceService.getPlatformRoles(context) };
-    }
-    if (request.method === 'GET' && url.pathname === '/api/v2/platform/organization-applications') {
-      return { status: 200, body: await this.organizationGovernanceService.listApplications(context, { status: url.searchParams.get('status') }) };
-    }
-    const applicationReview = url.pathname.match(/^\/api\/v2\/platform\/organization-applications\/([^/]+)\/review$/);
-    if (request.method === 'POST' && applicationReview) {
-      return { status: 200, body: await this.organizationGovernanceService.reviewApplication(
-        context, decodeURIComponent(applicationReview[1]), await readJson(request),
-      ) };
-    }
-    if (request.method === 'GET' && url.pathname === '/api/v2/auth/workspaces') {
-      return { status: 200, body: { workspaces: await this.identityAccessService.listWorkspaces(context.actorId) } };
-    }
-    if (request.method === 'POST' && url.pathname === '/api/v2/auth/switch-workspace') {
-      return { status: 200, body: await this.identityAccessService.switchWorkspace(context, (await readJson(request)).tenantId) };
-    }
     if (request.method === 'POST' && url.pathname === '/api/v2/auth/logout') {
       return { status: 200, body: await this.identityAccessService.logout(context) };
     }
-    if (request.method === 'POST' && url.pathname === '/api/v2/auth/organizations') {
-      return { status: 201, body: await this.identityAccessService.createOrganization(context, await readJson(request)) };
+    if (request.method === 'GET' && url.pathname === '/api/v2/nfc/presentations/latest') {
+      await this.accessService.requireAnyRole(context, roles.verifier);
+      return { status: 200, body: await this.nfcPresentationService.latest() };
     }
-    if (request.method === 'POST' && url.pathname === '/api/v2/auth/invitations/accept') {
-      return { status: 200, body: await this.identityAccessService.acceptInvitation(context, await readJson(request)) };
-    }
-    if (request.method === 'POST' && url.pathname === '/api/v2/auth/invitations') {
-      await this.accessService.requireAnyRole(context, roles.administrator);
-      return { status: 201, body: await this.identityAccessService.inviteMember(context, await readJson(request)) };
-    }
-    if (request.method === 'GET' && url.pathname === '/api/v2/auth/members') {
-      await this.accessService.requireAnyRole(context, roles.administrator);
-      return { status: 200, body: await this.identityAccessService.listMembers(context) };
-    }
-    const memberRole = url.pathname.match(/^\/api\/v2\/auth\/members\/([^/]+)\/role$/);
-    if (request.method === 'POST' && memberRole) {
-      await this.accessService.requireAnyRole(context, roles.administrator);
-      return { status: 200, body: await this.identityAccessService.setMemberRole(
-        context, decodeURIComponent(memberRole[1]), await readJson(request),
-      ) };
-    }
-    if (request.method === 'GET' && url.pathname === '/api/v2/wallet/holder-dids') {
-      return { status: 200, body: await this.holderDidDirectoryService.listMine(context) };
-    }
-    if (request.method === 'POST' && url.pathname === '/api/v2/wallet/holder-dids') {
-      await this.accessService.requireAnyRole(context, roles.holder);
-      return { status: 201, body: await this.holderDidDirectoryService.register(context, await readJson(request)) };
+    const nfcVerify = url.pathname.match(/^\/api\/v2\/nfc\/presentations\/([^/]+)\/verify$/);
+    if (request.method === 'POST' && nfcVerify) {
+      await this.accessService.requireAnyRole(context, roles.verifier);
+      return { status: 200, body: await this.nfcPresentationService.verify(context, decodeURIComponent(nfcVerify[1])) };
     }
     if (request.method === 'POST' && url.pathname === '/api/v2/holder-dids/directory-link') {
       await this.accessService.requireAnyRole(context, roles.issuer);
       return { status: 201, body: await this.holderDidDirectoryService.linkToOrganization(context, await readJson(request)) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/holder-requests') {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 200, body: await this.holderOrganizationRequestService.list(context) };
+    }
+    const holderRequestDecision = url.pathname.match(/^\/api\/v2\/holder-requests\/([^/]+)\/(accept|reject)$/);
+    if (request.method === 'POST' && holderRequestDecision) {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 200, body: await this.holderOrganizationRequestService.decide(context,
+        decodeURIComponent(holderRequestDecision[1]), holderRequestDecision[2] === 'accept' ? 'accepted' : 'rejected') };
     }
     if (request.method === 'GET' && url.pathname === '/api/v2/blockchain/status') {
       await this.accessService.requireAnyRole(context, roles.reader);
@@ -256,15 +247,6 @@ export class V2Api {
     if (request.method === 'POST' && walletPackage) {
       await this.accessService.requireAnyRole(context, roles.issuer);
       return { status: 200, body: await this.credentialService.createWalletPackage(context, decodeURIComponent(walletPackage[1])) };
-    }
-    const disclose = url.pathname.match(/^\/api\/v2\/credentials\/([^/]+)\/(disclosures|sd-jwt)$/);
-    if (request.method === 'POST' && disclose) {
-      await this.accessService.requireAnyRole(context, roles.holder);
-      const body = await readJson(request); const id = decodeURIComponent(disclose[1]);
-      const presentation = disclose[2] === 'sd-jwt'
-        ? await this.disclosureService.createSdJwtPresentation(context, id, body.paths)
-        : await this.disclosureService.createTeachingPresentation(context, id, body.paths);
-      return { status: 200, body: disclose[2] === 'sd-jwt' ? { sdJwt: presentation } : presentation };
     }
     if (request.method === 'GET' && url.pathname === '/api/v2/verification-evidence') {
       await this.accessService.requireAnyRole(context, [...roles.verifier, 'tenant_admin']);

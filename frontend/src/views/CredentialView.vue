@@ -96,7 +96,7 @@ onMounted(refreshTemplates)
           <label>有效至<input v-model="issueForm.validUntil" type="datetime-local" required></label>
           <button class="primary" :disabled="!selectedTemplate">使用 Issuer KMS 签发</button><p class="message">{{ message }}</p></form>
       </section>
-      <section class="panel"><header class="panel-head"><div><p>PROTECTED REGISTER</p><h2>VC 非敏感摘要</h2></div><span>列表不解密</span></header><CredentialTable :records="workspace.credentials" @reveal="reveal" @lifecycle="lifecycle" @delivery="delivery" /></section>
+      <section class="panel"><header class="panel-head"><div><p>ISSUANCE HISTORY</p><h2>凭证签发日志</h2></div><span>按时间查看签发给谁的什么凭证</span></header><CredentialTable :records="workspace.credentials" @reveal="reveal" @lifecycle="lifecycle" @delivery="delivery" /></section>
     </div><JsonDialog ref="dialog" />
   </div>
 </template>

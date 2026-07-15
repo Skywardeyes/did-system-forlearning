@@ -46,5 +46,5 @@ test('local demo operator roles are explicit and are not inherited from tenant a
   const connection = new FakeConnection();
   const ids = ['org-1', 'user-1', 'admin', 'issuer', 'holder', 'verifier'];
   const result = await seedTenantAdmin(connection, { grantDemoOperatorRoles: true, createId: () => ids.shift() });
-  assert.deepEqual(result.roles, ['tenant_admin', 'issuer_operator', 'holder_operator', 'verifier_operator']);
+  assert.deepEqual(result.roles, ['tenant_admin', 'issuer_operator', 'verifier_operator']);
 });

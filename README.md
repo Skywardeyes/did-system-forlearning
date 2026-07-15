@@ -1,6 +1,6 @@
 # 信证台：DID/VC 本地演示系统
 
-> 多租户 MVP 更新：系统现采用“统一自然人账号 + 个人空间 + 多组织空间”模型，包含组织审核、成员邀请、可撤销会话、平台治理角色和 Holder 公开 DID 目录。详见 [统一账号与多组织多租户 MVP](docs/统一账号与多组织多租户MVP.md)。
+> 答辩整改版 MVP：Holder 只使用独立信证钱包；Issuer 与 Verifier 只使用信证台。信证台账号只绑定一个组织，不再提供个人空间、组织切换或跨组织成员关系。详见 [MVP 角色简化与碰一碰演示](docs/MVP角色简化与碰一碰演示.md)。
 
 需要现场从零演示时，请直接按照 [多租户 MVP 全流程演示操作手册](docs/多租户MVP全流程演示操作手册.md) 执行。
 
@@ -37,7 +37,9 @@ npm run chain:deploy
 
 - 签发机构创建并由 KMS 管理 Issuer DID；Holder 在独立钱包本地创建 `did:key`
 - 签发平台只登记 Holder 的公开 DID Document，不创建、不保存 Holder 私钥
-- 钱包可将公开登记包一键发送给本地演示管理后端；生产环境应替换为机构邀请或 Wallet-to-Issuer 注册协议
+- 钱包使用 Holder 本地私钥签署公开登记包，可直接发布 DID Document；无需注册信证台个人账号
+- 信证钱包提供独立的 Holder 注册、登录和七天会话；该账号体系与信证台组织账号完全分离
+- 钱包注册可选择本地自托管或“平台代托管（MVP 模拟）”；当前代托管只记录模式，尚不代表生产级密钥托管已经完成
 - 签发后自动创建待领取凭证；钱包每 15 秒检查收件箱，并可启用浏览器提醒，领取后自动导入本地钱包
 - 钱包本地保存 VC 交付包、选择字段并生成带 Holder 本地签名的最小披露证明
 - `did:example` 支持更新、密钥轮换和不可逆停用；`did:key` 明确禁用这三类操作
@@ -52,7 +54,7 @@ npm run chain:deploy
 - 保存最近验证记录
 - 使用随机盐、SHA-256 声明摘要和 Issuer Ed25519 签名生成教学版选择性披露证明
 - 组织可创建版本化凭证模板，签发任意受控字段；钱包可按签发方、凭证名称或 ID 搜索并添加多张 VC，再组合选择字段
-- 信证台个人空间只保留账号关系、公开 Holder DID 与钱包入口，完整 VC 和选择性披露统一由个人钱包处理
+- 信证台只面向组织侧 Issuer / Verifier；Holder 的身份、凭证和选择性披露统一由个人钱包处理
 - 验证方使用公开 DID、公钥历史、模板摘要和凭证状态逐张验证，并记录组合验证台账
 - 支持 RFC 9901 核心 SD-JWT：Issuer-signed JWT、`_sd` 摘要和按需 Disclosure 紧凑串
 - 只公开选中的姓名、课程、完成日期或完成状态，未公开字段原值和盐不进入披露证明
@@ -68,7 +70,7 @@ npm run chain:deploy
 2. 在机构侧“凭证签发”选择已登记的 Holder DID 并签发 VC；系统会创建待领取凭证，不交付 Holder 私钥。
 3. 保持钱包页面打开，收件箱会在最多 15 秒内显示新凭证（也可启用浏览器提醒）；点击“领取并导入”即自动导入本地钱包。
 4. 在钱包中选择字段并生成本地签名的最小披露证明。
-5. 在“钱包验证”粘贴钱包证明，验证 Issuer 签名、VC 状态、Holder DID 和 Holder 本地签名。
+5. 钱包点击“碰一下，就验证！”，验证方入口自动收到证明；点击“验证”后在右侧查看 Issuer 签名、VC 状态、Holder DID、Holder 本地签名和防重放结果。
 6. 点击“模拟篡改姓名”，再次验证，观察 Ed25519 签名失败。
 7. 返回总览，在凭证台账撤销原始 VC；重新载入该 VC 并验证，观察撤销状态失败。
 8. 在个人钱包打开“选择性披露”，搜索并添加所需凭证，只勾选准备公开的字段；再到验证方页面验证并查看组合验证台账。
@@ -105,7 +107,7 @@ database/               MySQL 迁移脚本与 V10 Schema
 
 本系统参考 W3C DID Core 与 VC Data Model 2.0 的核心数据结构，实现教学演示版 DID、VC 和 proof。`did:key` 的 Ed25519 公钥指纹采用 multicodec 前缀和 base58btc 编码；完整 VC proof 使用稳定键序 JSON 和 Ed25519 签名。选择性披露使用加盐 SHA-256 声明摘要与 Ed25519 摘要清单签名。
 
-完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统实现 RFC 9901 核心 SD-JWT，并增加课程 MVP 的 `WalletBoundSdJwtPresentation2026`：钱包本地选择 Disclosure，并以 Holder Ed25519 私钥绑定 Challenge 和验证方域名。验证方生成的 Challenge 只以 SHA-256 哈希写入 V7 台账，并在首次成功验证时原子消费。它不是正式 SD-JWT Holder Key Binding 规范实现；跨机构 DID 注册网络、链上状态列表和正式身份核验仍属于下一阶段。
+完整 VC proof 的名称为 `EducationalEd25519Signature2026`，教学版选择性披露证明为 `EducationalSelectiveDisclosureProof2026`，用于明确区分教学实现与正式注册的 W3C Data Integrity cryptosuite、BBS+ 或零知识证明。系统实现 RFC 9901 核心 SD-JWT，并增加课程 MVP 的 Holder 组合签名。碰一碰流程仍会在后台生成一次性 Challenge、保存哈希并在首次验证时原子消费，只是把复制、填写和粘贴从演示界面隐藏。它不是正式 NFC 协议或 SD-JWT Holder Key Binding 规范实现。
 
 ## 配置
 

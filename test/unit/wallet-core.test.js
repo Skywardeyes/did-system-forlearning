@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { assertWalletPackage, createIdentity, createWalletPresentation, registrationPackage, walletCredentialDisplay } from '../../wallet/wallet-core.js';
+import { assertWalletPackage, createIdentity, createWalletPresentation, registrationPackage, signedRegistrationPackage, walletCredentialDisplay, walletPackagesForIdentity } from '../../wallet/wallet-core.js';
+import { verifyPayload } from '../../src/crypto.js';
 
 test('wallet creates a non-extractable local Holder key and did:key registration package', async () => {
   const identity = await createIdentity('Local Holder');
@@ -8,6 +9,26 @@ test('wallet creates a non-extractable local Holder key and did:key registration
   assert.equal(identity.privateKey.extractable, false);
   assert.equal(identity.document.id, identity.did);
   assert.equal(registrationPackage(identity).document.verificationMethod[0].publicKeyJwk.d, undefined);
+});
+
+test('wallet can create multiple independent Holder DIDs instead of replacing one primary identity', async () => {
+  const first = await createIdentity('学习身份');
+  const second = await createIdentity('职业身份');
+  assert.notEqual(first.id, second.id);
+  assert.notEqual(first.did, second.did);
+  assert.notDeepEqual(first.publicJwk, second.publicJwk);
+  assert.equal(first.label, '学习身份');
+  assert.equal(second.label, '职业身份');
+});
+
+test('wallet proves control when publishing a Holder DID without a platform account', async () => {
+  const identity = await createIdentity('学生钱包');
+  const published = await signedRegistrationPackage(identity);
+  const binding = { type: published.type, name: published.name, did: published.did,
+    document: published.document, verificationMethod: published.verificationMethod };
+  assert.equal(published.format, 'holder-did-registration-v2');
+  assert.equal(verifyPayload(binding, identity.publicJwk, published.proof.proofValue), true);
+  assert.doesNotMatch(JSON.stringify(published), /privateKey|"d"\s*:/);
 });
 
 test('wallet accepts dynamic v2 packages only when field metadata matches disclosures', () => {
@@ -39,6 +60,13 @@ test('legacy wallet packages get a readable credential name and searchable claim
   assert.equal(display.title, '培训结业凭证');
   assert.equal(display.summary, '课程：数字身份训练营');
   assert.match(display.searchText, /数字身份训练营/);
+});
+
+test('wallet only exposes credentials belonging to the current Holder DID', () => {
+  const current = { did: 'did:key:current' };
+  const items = [{ credentialId: 'current-vc', holderDid: current.did }, { credentialId: 'old-vc', holderDid: 'did:key:old' }];
+  assert.deepEqual(walletPackagesForIdentity(items, current).map((item) => item.credentialId), ['current-vc']);
+  assert.deepEqual(walletPackagesForIdentity(items, null), []);
 });
 
 test('wallet signs a minimal SD-JWT presentation locally without including its private key', async () => {

@@ -42,6 +42,12 @@ import { VerificationPresentationRepository } from './repositories/verification-
 import { V2Api } from './v2-api.js';
 import { WalletInboxService } from './services/wallet-inbox-service.js';
 import { ChainRegistryService } from './services/chain-registry-service.js';
+import { NfcPresentationRepository } from './repositories/nfc-presentation-repository.js';
+import { NfcPresentationService } from './services/nfc-presentation-service.js';
+import { WalletAccountRepository } from './repositories/wallet-account-repository.js';
+import { WalletAccountService } from './services/wallet-account-service.js';
+import { HolderOrganizationRequestRepository } from './repositories/holder-organization-request-repository.js';
+import { HolderOrganizationRequestService } from './services/holder-organization-request-service.js';
 import { DualAuditLogStore, V2AuditLogStore } from './repositories/v2-audit-log-store.js';
 
 export async function bootstrap(env = process.env, { createPool = mysql.createPool } = {}) {
@@ -49,7 +55,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 11 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 14 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -92,6 +98,11 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
         tokenService: new JwtTokenService({ secret: config.auth.jwtHs256Secret }) });
       const organizationGovernanceService = new OrganizationGovernanceService({ pool, repository: new OrganizationGovernanceRepository() });
       const holderDidDirectoryService = new HolderDidDirectoryService({ pool, repository: new HolderDidDirectoryRepository(), didService });
+      const nfcPresentationService = new NfcPresentationService({ pool,
+        repository: new NfcPresentationRepository({ envelopeCrypto }), holderDidDirectoryRepository: new HolderDidDirectoryRepository(), verificationService });
+      const walletAccountService = new WalletAccountService({ pool, repository: new WalletAccountRepository() });
+      const holderOrganizationRequestService = new HolderOrganizationRequestService({ pool,
+        repository: new HolderOrganizationRequestRepository(), holderDidDirectoryService });
       const localSessionService = new LocalSessionService({
         pool, secret: config.auth.jwtHs256Secret, enabled: config.auth.localDevLogin,
         organizationName: env.BOOTSTRAP_ORG_NAME || '本地演示组织',
@@ -101,7 +112,8 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const chainRegistryService = new ChainRegistryService({ blockchain: config.blockchain });
       v2Api = new V2Api({ authenticator, accessService, didService, credentialService, disclosureService,
         verificationService, credentialAccessService, identityAccessService, organizationGovernanceService,
-        holderDidDirectoryService, credentialTemplateService, localSessionService, logService, walletInboxService, chainRegistryService });
+        holderDidDirectoryService, credentialTemplateService, localSessionService, logService, walletInboxService, chainRegistryService,
+        nfcPresentationService, walletAccountService, holderOrganizationRequestService });
     }
     return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled,
       requireHttps: config.security.requireHttps, serveFrontend: config.application.serveFrontend }), pool,

@@ -1,15 +1,13 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
-import { platformApi, sessionApi } from '../api'
+import { sessionApi } from '../api'
 import { setAccessToken } from '../api/client'
-import type { SessionInfo, WorkspaceSummary } from '../types'
+import type { SessionInfo } from '../types'
 
 const storageKey = 'did-vc-session-v2'
 
 export const useSessionStore = defineStore('session', () => {
   const session = ref<SessionInfo | null>(null)
-  const workspaces = ref<WorkspaceSummary[]>([])
-  const platformRoles = ref<string[]>([])
   const loading = ref(false)
   const initialized = ref(false)
   const error = ref('')
@@ -24,7 +22,6 @@ export const useSessionStore = defineStore('session', () => {
       const restored = JSON.parse(raw) as SessionInfo
       if (!isCompleteSession(restored)) throw new Error('Stored session is incomplete')
       applySession(restored)
-      await refreshEntitlements()
     } catch { clear() }
   }
 
@@ -36,17 +33,13 @@ export const useSessionStore = defineStore('session', () => {
     return run(() => sessionApi.register(input))
   }
 
-  async function switchWorkspace(tenantId: string) {
-    return run(() => sessionApi.switchWorkspace(tenantId))
-  }
-
   async function logout() {
     try { if (authenticated.value) await sessionApi.logout() } finally { clear() }
   }
 
   async function run(operation: () => Promise<SessionInfo>) {
     loading.value = true; error.value = ''
-    try { const value = await operation(); applySession(value); await refreshEntitlements(); return value }
+    try { const value = await operation(); applySession(value); return value }
     catch (reason) { error.value = reason instanceof Error ? reason.message : '操作失败'; throw reason }
     finally { loading.value = false }
   }
@@ -54,22 +47,16 @@ export const useSessionStore = defineStore('session', () => {
   function applySession(value: SessionInfo) {
     if (!isCompleteSession(value)) throw new Error('服务器返回了不完整的会话信息，请重新登录')
     session.value = value
-    workspaces.value = value.workspaces || workspaces.value
     setAccessToken(value.accessToken)
     sessionStorage.setItem(storageKey, JSON.stringify(value))
   }
 
-  async function refreshEntitlements() {
-    const [workspaceResult, platformResult] = await Promise.all([sessionApi.workspaces(), platformApi.me()])
-    workspaces.value = workspaceResult.workspaces; platformRoles.value = platformResult.roles
-  }
-
   function clear() {
-    setAccessToken(null); session.value = null; workspaces.value = []; platformRoles.value = []
+    setAccessToken(null); session.value = null
     sessionStorage.removeItem(storageKey)
   }
 
-  return { session, workspaces, platformRoles, loading, initialized, error, authenticated, initialize, login, register, switchWorkspace, logout, clear }
+  return { session, loading, initialized, error, authenticated, initialize, login, register, logout, clear }
 })
 
 function isCompleteSession(value: unknown): value is SessionInfo {

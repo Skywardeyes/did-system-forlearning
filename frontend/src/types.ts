@@ -18,6 +18,8 @@ export interface CredentialSummary {
   validFrom: string; validUntil: string; rowVersion: number; contentProtected: true;
   selectiveDisclosureAvailable: boolean; sdJwtAvailable: boolean;
   templateId?: string | null; templateVersion?: number | null; schemaHash?: string | null;
+  templateName: string; credentialType?: string | null;
+  issuerName: string; issuerDid?: string | null; holderName: string; holderDid?: string | null;
 }
 
 export interface CredentialTemplateField { key: string; label: string; type: 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'enum'; required: boolean; order: number; options?: string[] }

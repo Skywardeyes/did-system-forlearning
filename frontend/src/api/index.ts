@@ -1,23 +1,11 @@
 import { api } from './client'
-import type { ChainDidRecord, CredentialSummary, CredentialTemplate, DidSummary, Page, SensitiveAccessLog, SessionInfo, StructuredLog, VerificationLog, VerificationPresentationLedger, VerificationResult, WorkspaceSummary } from '../types'
+import type { ChainDidRecord, CredentialSummary, CredentialTemplate, DidSummary, Page, SensitiveAccessLog, SessionInfo, StructuredLog, VerificationLog, VerificationPresentationLedger, VerificationResult } from '../types'
 
 export const sessionApi = {
   local: () => api<SessionInfo>('/api/v2/session/local', { method: 'POST', body: '{}' }),
   register: (body: object) => api<SessionInfo>('/api/v2/auth/register', { method: 'POST', body: JSON.stringify(body) }),
   login: (body: object) => api<SessionInfo>('/api/v2/auth/login', { method: 'POST', body: JSON.stringify(body) }),
-  workspaces: () => api<{ workspaces: WorkspaceSummary[] }>('/api/v2/auth/workspaces'),
-  switchWorkspace: (tenantId: string) => api<SessionInfo>('/api/v2/auth/switch-workspace', { method: 'POST', body: JSON.stringify({ tenantId }) }),
   logout: () => api<{ loggedOut: boolean }>('/api/v2/auth/logout', { method: 'POST', body: '{}' }),
-  createOrganization: (body: object) => api('/api/v2/auth/organizations', { method: 'POST', body: JSON.stringify(body) }),
-  invite: (body: object) => api<{ id: string; invitedEmail: string; roleCode: string; token: string; expiresAt: string }>('/api/v2/auth/invitations', { method: 'POST', body: JSON.stringify(body) }),
-  acceptInvitation: (token: string) => api('/api/v2/auth/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
-  members: () => api<{ items: Array<{ id: string; displayName: string; email: string; roles: string[] }> }>('/api/v2/auth/members'),
-  setMemberRole: (userId: string, roleCode: string, active: boolean) => api(`/api/v2/auth/members/${encodeURIComponent(userId)}/role`, { method: 'POST', body: JSON.stringify({ roleCode, active }) }),
-}
-export const platformApi = {
-  me: () => api<{ roles: string[] }>('/api/v2/platform/me'),
-  applications: (status = 'pending') => api<{ items: Array<{ id: string; tenantId: string; organizationName: string; organizationType: string; registrationNumber: string | null; status: string; submitter: { name: string; email: string }; submittedAt: string }> }>(`/api/v2/platform/organization-applications?status=${encodeURIComponent(status)}`),
-  review: (id: string, decision: 'approved' | 'rejected', note: string) => api(`/api/v2/platform/organization-applications/${encodeURIComponent(id)}/review`, { method: 'POST', body: JSON.stringify({ decision, note }) }),
 }
 export const didApi = {
   list: () => api<Page<DidSummary>>('/api/v2/dids?page=1&pageSize=50'),
@@ -26,6 +14,8 @@ export const didApi = {
   action: (id: string, action: 'rotate-key' | 'deactivate', expectedVersion: number) => api<DidSummary>(`/api/v2/dids/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: JSON.stringify({ expectedVersion }) }),
   registerHolder: (body: object) => api<DidSummary>('/api/v2/holder-dids/registration', { method: 'POST', body: JSON.stringify(body) }),
   linkPublishedHolder: (did: string) => api<DidSummary>('/api/v2/holder-dids/directory-link', { method: 'POST', body: JSON.stringify({ did }) }),
+  holderRequests: () => api<{ items: Array<{ id: string; holderDid: string; holderDisplayName: string; message: string | null; status: 'pending' | 'accepted' | 'rejected'; createdAt: string }> }>('/api/v2/holder-requests'),
+  decideHolderRequest: (id: string, decision: 'accept' | 'reject') => api(`/api/v2/holder-requests/${encodeURIComponent(id)}/${decision}`, { method: 'POST', body: '{}' }),
 }
 export const blockchainApi = {
   status: () => api<Pick<ChainDidRecord, 'enabled' | 'ready' | 'reason' | 'chainId' | 'contractAddress'>>('/api/v2/blockchain/status'),
@@ -47,6 +37,8 @@ export const credentialApi = {
   createWalletChallenge: (body: { domain: string; ttlSeconds?: number }) => api<{ challenge: string; domain: string; expiresAt: string; ttlSeconds: number }>('/api/v2/wallet-challenges', { method: 'POST', body: JSON.stringify(body) }),
   verifyWalletPresentation: (presentation: object) => api<VerificationResult>('/api/v2/wallet-presentations/verify', { method: 'POST', body: JSON.stringify({ presentation }) }),
   walletPresentationLedger: () => api<Page<VerificationPresentationLedger>>('/api/v2/verification-presentations?page=1&pageSize=20'),
+  latestNfcPresentation: () => api<{ transferId: string; holderDid: string; submittedAt: string; expiresAt: string; credentialCount: number } | null>('/api/v2/nfc/presentations/latest'),
+  verifyNfcPresentation: (transferId: string) => api<VerificationResult>(`/api/v2/nfc/presentations/${encodeURIComponent(transferId)}/verify`, { method: 'POST', body: '{}' }),
 }
 export const credentialTemplateApi = {
   list: (status = '') => api<Page<CredentialTemplate>>(`/api/v2/credential-templates?page=1&pageSize=50${status ? `&status=${encodeURIComponent(status)}` : ''}`),

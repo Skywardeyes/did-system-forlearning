@@ -35,6 +35,15 @@ export class V2VerificationService {
     return { challenge, domain, expiresAt: expiresAt.toISOString(), ttlSeconds: requestedTtl };
   }
 
+  async importWalletChallenge(context, input = {}) {
+    const challenge = String(input.challenge || ''); const domain = String(input.domain || '').trim().toLowerCase();
+    const expiresAt = new Date(input.expiresAt); const createdAt = new Date();
+    if (challenge.length < 16 || !domain || !Number.isFinite(expiresAt.getTime()) || expiresAt <= createdAt) throw new Error('Transferred verifier challenge is invalid or expired');
+    await this.unitOfWork.run(context, (operation) => this.verifierChallengeRepository.issue(operation, {
+      id: randomUUID(), challengeHash: challengeHash(challenge), domain, createdAt: createdAt.toISOString(), expiresAt: expiresAt.toISOString(),
+    }));
+  }
+
   async listPresentations(context, query = {}) {
     if (!this.presentationRepository) throw new Error('Verification presentation ledger is not configured');
     return this.unitOfWork.run(context, (operation) => this.presentationRepository.list(operation, query));

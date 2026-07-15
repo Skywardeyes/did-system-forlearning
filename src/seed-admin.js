@@ -44,7 +44,7 @@ export async function seedTenantAdmin(connection, {
 
     const roles = ['tenant_admin'];
     if (grantCredentialReader) roles.push('credential_data_reader');
-    if (grantDemoOperatorRoles) roles.push('issuer_operator', 'holder_operator', 'verifier_operator');
+    if (grantDemoOperatorRoles) roles.push('issuer_operator', 'verifier_operator');
     const membershipIds = [];
     for (const role of roles) {
       const [membershipRows] = await connection.execute(

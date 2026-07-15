@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import JsonDialog from '../components/JsonDialog.vue'
 import { blockchainApi, didApi } from '../api'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -12,6 +12,16 @@ const publishedHolderDid = ref('')
 const message = ref('')
 const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 const chainRecords = reactive<Record<string, ChainDidRecord>>({})
+const holderRequests = ref<Array<{ id: string; holderDid: string; holderDisplayName: string; message: string | null; status: string; createdAt: string }>>([])
+
+async function loadHolderRequests() {
+  try { holderRequests.value = (await didApi.holderRequests()).items }
+  catch (error) { message.value = error instanceof Error ? error.message : 'Holder 申请加载失败' }
+}
+async function decideHolderRequest(id: string, decision: 'accept' | 'reject') {
+  try { await didApi.decideHolderRequest(id, decision); await Promise.all([loadHolderRequests(), workspace.refresh()]); message.value = decision === 'accept' ? '已接受申请并自动关联 Holder DID。' : '已拒绝 Holder 关联申请。' }
+  catch (error) { message.value = error instanceof Error ? error.message : '申请处理失败' }
+}
 
 async function createIssuerDid() {
   try {
@@ -48,6 +58,7 @@ async function chainAction(did: DidSummary, name: 'sync' | 'deactivate') {
     message.value = name === 'sync' ? 'Issuer DID 已写入本地链上注册表' : 'Issuer DID 链上停用状态已写入'
   } catch (error) { message.value = error instanceof Error ? error.message : '链上操作失败' }
 }
+onMounted(loadHolderRequests)
 </script>
 
 <template>
@@ -64,6 +75,17 @@ async function chainAction(did: DidSummary, name: 'sync' | 'deactivate') {
       <header class="panel-head"><div><p>HOLDER SELF-CUSTODY</p><h2>登记个人钱包 DID</h2></div></header>
       <form @submit.prevent="linkPublishedHolder"><label>已在个人钱包发布的 Holder DID<input v-model="publishedHolderDid" required placeholder="did:key:z6Mk..."></label><button class="primary" type="submit">从公开目录关联到当前组织</button></form>
       <p class="security-note">推荐流程：用户先在个人钱包登录并发布公开 DID，机构再按 DID 关联。这里只复制公开 DID Document，私钥仍不上传。</p>
+      <hr>
+      <header class="panel-head"><div><p>HOLDER REQUEST INBOX</p><h2>Holder 关联申请</h2></div><button type="button" @click="loadHolderRequests">刷新</button></header>
+      <div class="cards">
+        <article v-for="request in holderRequests" :key="request.id" class="did-card">
+          <header><strong>{{ request.holderDisplayName }}</strong><span class="status" :class="request.status">{{ request.status }}</span></header>
+          <code>{{ request.holderDid }}</code><p v-if="request.message">申请说明：{{ request.message }}</p><small>{{ new Date(request.createdAt).toLocaleString() }}</small>
+          <div v-if="request.status === 'pending'" class="actions"><button class="primary" @click="decideHolderRequest(request.id, 'accept')">接受并关联</button><button class="danger" @click="decideHolderRequest(request.id, 'reject')">拒绝</button></div>
+        </article>
+        <p v-if="!holderRequests.length" class="empty">暂无 Holder 关联申请。</p>
+      </div>
+      <p class="security-note">接受后系统从公共目录复制该 Holder 的公开 DID Document 到当前组织，不接收 Holder 私钥。</p>
       <hr>
       <form @submit.prevent="registerHolder">
         <label>显示名称（可选）<input v-model="holderRegistration.name" maxlength="120" placeholder="默认使用钱包登记包名称"></label>

@@ -1,8 +1,20 @@
 const BASE58 = '123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz'
 const DB_NAME = 'did-vc-personal-wallet'
-const DB_VERSION = 1
-const IDENTITY_STORE = 'identities'
-const PACKAGE_STORE = 'packages'
+const DB_VERSION = 2
+const IDENTITY_STORE = 'account-identities'
+const PACKAGE_STORE = 'account-packages'
+let accountScope = null
+
+export function setWalletAccountScope(accountId) {
+  const value = String(accountId || '').trim()
+  if (!value) throw new Error('钱包账号范围不可为空')
+  accountScope = value
+}
+
+function scopedKey(suffix) {
+  if (!accountScope) throw new Error('请先登录钱包账号')
+  return `${accountScope}:${suffix}`
+}
 
 export const DISCLOSABLE_PATHS = Object.freeze([
   ['credentialSubject.name', '姓名'],
@@ -40,6 +52,11 @@ export function walletCredentialDisplay(item) {
   const summary = details.slice(0, 3).join('，')
   const searchText = [title, summary, issuerName, rawType, item?.issuerDid, item?.credentialId, ...details].filter(Boolean).join(' ').toLocaleLowerCase()
   return { title, summary, optionLabel: summary ? `${title}｜${summary}` : title, searchText }
+}
+
+export function walletPackagesForIdentity(items, identity) {
+  if (!identity?.did || !Array.isArray(items)) return []
+  return items.filter((item) => item?.holderDid === identity.did)
 }
 
 export function stableStringify(value) {
@@ -89,7 +106,7 @@ function openDatabase() {
     request.onupgradeneeded = () => {
       const db = request.result
       if (!db.objectStoreNames.contains(IDENTITY_STORE)) db.createObjectStore(IDENTITY_STORE, { keyPath: 'id' })
-      if (!db.objectStoreNames.contains(PACKAGE_STORE)) db.createObjectStore(PACKAGE_STORE, { keyPath: 'credentialId' })
+      if (!db.objectStoreNames.contains(PACKAGE_STORE)) db.createObjectStore(PACKAGE_STORE, { keyPath: 'storageKey' })
     }
     request.onsuccess = () => resolve(request.result)
     request.onerror = () => reject(request.error)
@@ -107,7 +124,8 @@ export async function createIdentity(label = '我的身份') {
   const publicJwk = await crypto.subtle.exportKey('jwk', pair.publicKey)
   const did = `did:key:${fingerprint(publicJwk)}`
   const document = didDocument(did, publicJwk)
-  const identity = { id: 'primary', label: String(label || '我的身份').slice(0, 120), did, document, publicJwk,
+  const localId = `identity:${crypto.randomUUID()}`
+  const identity = { id: accountScope ? scopedKey(localId) : localId, label: String(label || '我的身份').slice(0, 120), did, document, publicJwk,
     privateKey: pair.privateKey, publicKey: pair.publicKey, createdAt: new Date().toISOString() }
   return identity
 }
@@ -119,12 +137,31 @@ export async function createAndStoreIdentity(label = '我的身份') {
 }
 
 export async function loadIdentity() {
-  return transaction(IDENTITY_STORE, 'readonly', (store) => requestToPromise(store.get('primary')))
+  const identities = await listIdentities()
+  return identities[0] || null
+}
+
+export async function listIdentities() {
+  const prefix = `${accountScope}:`
+  const identities = await transaction(IDENTITY_STORE, 'readonly', (store) => requestToPromise(store.getAll()))
+  return identities.filter((identity) => String(identity?.id || '').startsWith(prefix))
+    .sort((left, right) => String(right.createdAt || '').localeCompare(String(left.createdAt || '')))
 }
 
 export function registrationPackage(identity) {
   if (!identity?.did || !identity?.document) throw new Error('请先在本钱包创建身份')
   return { format: 'holder-did-registration-v1', name: identity.label, did: identity.did, document: identity.document }
+}
+
+export async function signedRegistrationPackage(identity) {
+  if (!identity?.privateKey || !identity?.did || !identity?.document) throw new Error('请先在本钱包创建身份')
+  const verificationMethod = identity.document.verificationMethod?.[0]?.id
+  const binding = { type: 'HolderDidRegistration2026', name: identity.label, did: identity.did,
+    document: identity.document, verificationMethod }
+  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, identity.privateKey,
+    new TextEncoder().encode(stableStringify(binding)))
+  return { format: 'holder-did-registration-v2', ...binding,
+    proof: { type: 'Ed25519Signature2020', verificationMethod, proofValue: toBase64Url(new Uint8Array(signature)) } }
 }
 
 export function assertWalletPackage(value) {
@@ -152,14 +189,15 @@ export async function importWalletPackage(raw, identity) {
   if (!identity?.did || value.holderDid !== identity.did || value.credential?.credentialSubject?.id !== identity.did) {
     throw new Error('该凭证的 Holder DID 与当前钱包身份不匹配')
   }
-  const packageRecord = { ...value, importedAt: new Date().toISOString() }
+  const packageRecord = { ...value, storageKey: scopedKey(value.credentialId), accountId: accountScope, importedAt: new Date().toISOString() }
   await transaction(PACKAGE_STORE, 'readwrite', (store) => requestToPromise(store.put(packageRecord)))
   return packageRecord
 }
 
 export async function listWalletPackages() {
   const items = await transaction(PACKAGE_STORE, 'readonly', (store) => requestToPromise(store.getAll()))
-  return items.sort((left, right) => String(right.importedAt).localeCompare(String(left.importedAt)))
+  return items.filter((item) => item.accountId === accountScope)
+    .sort((left, right) => String(right.importedAt).localeCompare(String(left.importedAt)))
 }
 
 export function randomChallenge() {

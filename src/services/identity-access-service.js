@@ -18,7 +18,7 @@ export class IdentityAccessService {
     const email = normalizeEmail(input.email);
     const passwordPhc = await hashPassword(input.password);
     const now = new Date(this.clock()).toISOString();
-    const userId = this.createId(); const personalWorkspaceId = this.createId();
+    const userId = this.createId();
     const connection = await this.pool.getConnection();
     try {
       await connection.beginTransaction();
@@ -27,17 +27,13 @@ export class IdentityAccessService {
       }
       await this.repository.createUser(connection, { id: userId, externalSubject: `local:${userId}`, displayName, email, createdAt: now });
       await this.repository.createLocalAccount(connection, { id: this.createId(), userId, normalizedEmail: email, passwordPhc, createdAt: now });
-      await this.repository.createWorkspace(connection, { id: personalWorkspaceId, name: `${displayName}的个人空间`, workspaceType: 'personal',
-        slug: `personal-${userId}`, verificationStatus: 'not_applicable', createdByUserId: userId, personalOwnerUserId: userId, createdAt: now });
-      await this.repository.createMembership(connection, { id: this.createId(), tenantId: personalWorkspaceId, userId, roleCode: 'holder_operator', createdAt: now });
-      await this.repository.createMembership(connection, { id: this.createId(), tenantId: personalWorkspaceId, userId, roleCode: 'workspace_owner', createdAt: now });
-      let organization = null;
-      if (input.onboarding?.type === 'organization') organization = await this.createOrganizationInTransaction(connection, userId, input.onboarding.organization, now);
+      const organization = await this.createOrganizationInTransaction(connection, userId,
+        input.organization || input.onboarding?.organization, now);
       const session = await this.createSession(connection, userId, 1, now);
       const workspaces = await this.repository.listWorkspaces(connection, userId);
       await connection.commit();
       return this.sessionResponse({ user: { id: userId, displayName, email }, workspaces,
-        selectedTenantId: personalWorkspaceId, session, organization });
+        selectedTenantId: organization.id, session, organization });
     } catch (error) {
       await connection.rollback();
       if (error.code === 'ER_DUP_ENTRY' && !(error instanceof IdentityAccessError)) throw new IdentityAccessError('该邮箱或空间标识已被使用', 'ACCOUNT_ALREADY_EXISTS');
@@ -68,7 +64,9 @@ export class IdentityAccessService {
       const workspaces = await this.repository.listWorkspaces(connection, account.user_id);
       if (!workspaces.length) throw new IdentityAccessError('账号没有可用空间', 'WORKSPACE_UNAVAILABLE');
       await connection.commit();
-      const selected = workspaces.find((item) => item.type === 'personal') || workspaces[0];
+      const organizations = workspaces.filter((item) => item.type === 'organization');
+      if (organizations.length !== 1) throw new IdentityAccessError('组织账号必须且只能绑定一个组织', 'WORKSPACE_UNAVAILABLE');
+      const selected = organizations[0];
       return this.sessionResponse({ user: { id: account.user_id, displayName: account.display_name, email: account.email },
         workspaces, selectedTenantId: selected.id, session });
     } catch (error) {
@@ -178,15 +176,12 @@ export class IdentityAccessService {
     const tenantId = this.createId();
     const slugStem = String(input?.slug || name).toLowerCase().normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 48) || 'organization';
     const workspace = { id: tenantId, name, workspaceType: 'organization', slug: `${slugStem}-${tenantId.slice(0, 8)}`,
-      verificationStatus: 'pending', createdByUserId: userId, personalOwnerUserId: null, createdAt: now };
+      verificationStatus: 'approved', createdByUserId: userId, personalOwnerUserId: null, createdAt: now };
     await this.repository.createWorkspace(connection, workspace);
-    for (const roleCode of ['workspace_owner', 'tenant_admin']) {
+    for (const roleCode of ['workspace_owner', 'tenant_admin', 'issuer_operator', 'verifier_operator', 'credential_data_reader']) {
       await this.repository.createMembership(connection, { id: this.createId(), tenantId, userId, roleCode, createdAt: now });
     }
-    const applicationId = this.createId();
-    await this.repository.createOrganizationApplication(connection, { id: applicationId, tenantId, submittedByUserId: userId,
-      organizationType, registrationNumber: input.registrationNumber, evidence: input.evidence, submittedAt: now });
-    return { ...workspace, applicationId };
+    return { ...workspace, organizationType };
   }
 
   async createSession(connection, userId, credentialVersion, now) {

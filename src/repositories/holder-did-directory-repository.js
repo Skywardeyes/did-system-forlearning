@@ -31,14 +31,14 @@ export class HolderDidDirectoryRepository {
       `INSERT INTO v2_user_holder_dids
        (id, user_id, did, display_name, public_document, status, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, 'active', ?, ?)`,
-      [record.id, record.userId, record.did, record.displayName, JSON.stringify(record.document),
+      [record.id, record.userId || null, record.did, record.displayName, JSON.stringify(record.document),
         sqlDate(record.createdAt), sqlDate(record.createdAt)],
     );
   }
 }
 
 function map(row) {
-  return { id: row.id, userId: row.user_id, did: row.did, displayName: row.display_name,
+  return { id: row.id, userId: row.user_id || null, did: row.did, displayName: row.display_name,
     document: typeof row.public_document === 'string' ? JSON.parse(row.public_document) : row.public_document,
     status: row.status, createdAt: new Date(row.created_at).toISOString(), updatedAt: new Date(row.updated_at).toISOString() };
 }
