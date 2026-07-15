@@ -20,10 +20,8 @@ async function submit() {
 <template>
   <div class="auth-page">
     <section class="auth-intro">
-      <p class="eyebrow">DID / VC TRUST PLATFORM</p>
-      <h1>Issuer 与 Verifier 的组织工作台</h1>
-      <p>信证台只面向签发方和验证方。Holder 不在这里注册或切换空间，而是直接使用独立的信证钱包。</p>
-      <ul><li>一个账号只归属一个组织</li><li>组织可签发 VC，也可验证钱包出示</li><li>Holder 私钥始终留在个人钱包</li></ul>
+      <h1>信证台</h1>
+      <p>可信凭证一次签发，不同组织随处验证！</p>
     </section>
     <section class="auth-card">
       <div class="tabs"><button :class="{ active: mode === 'login' }" @click="mode = 'login'">登录</button><button :class="{ active: mode === 'register' }" @click="mode = 'register'">注册</button></div>

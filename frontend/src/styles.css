@@ -149,11 +149,14 @@ td.actions button { min-height: 32px; padding: 6px 9px; font-size: 11px; }
 .success-text { color: var(--success) !important; font-weight: 750; }
 .danger-text { color: var(--danger) !important; font-weight: 750; }
 
-.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(420px, .9fr); align-items: center; gap: clamp(42px, 7vw, 110px); padding: clamp(36px, 7vw, 110px); background: linear-gradient(132deg, var(--sidebar) 0 51%, var(--canvas) 51%); }
+.auth-page { position: relative; isolation: isolate; min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(420px, .9fr); align-items: center; gap: clamp(42px, 7vw, 110px); padding: clamp(36px, 7vw, 110px); overflow: hidden; background: linear-gradient(132deg, var(--sidebar) 0 51%, var(--canvas) 51%); }
+.auth-page::before { position: absolute; z-index: -1; width: 42vw; height: 42vw; left: -14vw; bottom: -22vw; border-radius: 50%; background: radial-gradient(circle at 36% 34%, #536ff0aa, #3157d530 48%, transparent 70%); content: ""; animation: auth-orbit 14s ease-in-out infinite alternate; }
+.auth-page::after { position: absolute; z-index: -1; inset: 0; opacity: .18; background-image: linear-gradient(#ffffff12 1px, transparent 1px), linear-gradient(90deg, #ffffff12 1px, transparent 1px); background-size: 48px 48px; content: ""; animation: auth-grid 20s linear infinite; mask-image: linear-gradient(132deg, #000 0 52%, transparent 52%); }
+.auth-page > * { position: relative; z-index: 1; }
 .auth-intro { max-width: 680px; color: #fff; }
 .auth-intro .eyebrow { color: #9eb1ff; }
-.auth-intro h1 { margin: 15px 0; font-size: clamp(38px, 5vw, 66px); line-height: 1.04; letter-spacing: -.045em; }
-.auth-intro > p:not(.eyebrow) { max-width: 620px; color: #bdc7d6; font-size: 14px; line-height: 1.8; }
+.auth-intro h1 { margin: 15px 0; font-size: clamp(54px, 6.5vw, 88px); line-height: 1; letter-spacing: -.055em; }
+.auth-intro > p:not(.eyebrow) { max-width: 680px; color: #d7ddec; font-size: clamp(18px, 1.65vw, 23px); font-weight: 650; line-height: 1.65; letter-spacing: .01em; }
 .auth-intro ul { margin: 25px 0 0; padding-left: 20px; color: #d6dce6; font-size: 13px; line-height: 2; }
 .auth-card { width: min(100%, 500px); padding: 28px; border: 1px solid #fff; border-radius: 16px; background: #fff; box-shadow: 0 28px 75px #10182838; }
 .auth-card .tabs { margin-bottom: 22px; }
@@ -161,6 +164,8 @@ td.actions button { min-height: 32px; padding: 6px 9px; font-size: 11px; }
 .auth-card fieldset { display: grid; gap: 14px; margin: 0; padding: 16px; border: 1px solid var(--line); border-radius: 11px; background: #fafbfc; }
 .auth-card legend { padding: 0 6px; color: #475467; font-size: 11px; font-weight: 750; }
 .auth-card form > .primary { width: 100%; margin-top: 3px; }
+@keyframes auth-orbit { from { transform: translate3d(0, 0, 0) scale(1); } to { transform: translate3d(9vw, -7vh, 0) scale(1.14); } }
+@keyframes auth-grid { to { background-position: 48px 48px; } }
 
 .result { display: inline-flex; align-items: center; min-height: 28px; padding: 5px 10px; border-radius: 999px; color: var(--muted); background: #eef1f5; font-size: 11px; font-weight: 800; }
 .result.valid { color: var(--success); background: var(--success-soft); }
@@ -189,7 +194,7 @@ dialog pre { max-height: 68vh; margin: 0; padding: 18px; overflow: auto; color: 
 }
 @media (max-width: 760px) {
   .auth-page { grid-template-columns: 1fr; gap: 25px; padding: 28px 18px; background: var(--sidebar); }
-  .auth-intro h1 { font-size: 38px; }
+  .auth-intro h1 { font-size: 48px; }
   .auth-card { width: 100%; }
   .app-shell { display: block; }
   .sidebar { position: static; height: auto; }
@@ -203,4 +208,7 @@ dialog pre { max-height: 68vh; margin: 0; padding: 18px; overflow: auto; color: 
   .form-row, .two-fields, .toolbar { grid-template-columns: 1fr; }
   .trust-flow { grid-template-columns: 1fr 1fr; }
   .template-field-row { grid-template-columns: 1fr; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .auth-page::before, .auth-page::after { animation: none; }
 }
