@@ -28,6 +28,8 @@ export class Hs256RequestAuthenticator {
     const actual = Buffer.from(signaturePart, 'base64url');
     if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) throw new AuthenticationError('Bearer token signature is invalid');
     if (!payload?.sub || !payload?.tenant_id || !Number.isFinite(payload.exp) || payload.exp * 1000 <= this.clock()) throw new AuthenticationError('Bearer token is expired or missing required claims');
-    return { actorId: String(payload.sub), tenantId: String(payload.tenant_id), requestId, authenticationMethod: 'jwt-hs256' };
+    return { actorId: String(payload.sub), tenantId: String(payload.tenant_id),
+      ...(payload.sid ? { sessionId: String(payload.sid) } : {}), ...(Number.isInteger(payload.cv) ? { credentialVersion: payload.cv } : {}),
+      requestId, authenticationMethod: 'jwt-hs256' };
   }
 }

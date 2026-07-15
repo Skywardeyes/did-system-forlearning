@@ -10,14 +10,20 @@ import { localDemoWalletIdentity } from './demo-wallet-identity.js';
 
 export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
-    credentialAccessService, localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null }) {
+    credentialAccessService, identityAccessService = null, organizationGovernanceService = null, holderDidDirectoryService = null,
+    localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null }) {
     this.authenticator = authenticator; this.accessService = accessService; this.didService = didService;
     this.credentialService = credentialService; this.disclosureService = disclosureService;
     this.verificationService = verificationService; this.localSessionService = localSessionService; this.logService = logService;
     this.credentialAccessService = credentialAccessService; this.walletInboxService = walletInboxService; this.chainRegistryService = chainRegistryService;
+    this.identityAccessService = identityAccessService;
+    this.organizationGovernanceService = organizationGovernanceService;
+    this.holderDidDirectoryService = holderDidDirectoryService;
   }
 
   async handle(request, url, requestId, readJson) {
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/register') return { status: 201, body: await this.identityAccessService.register(await readJson(request)) };
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/login') return { status: 200, body: await this.identityAccessService.login(await readJson(request)) };
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/challenge') return { status: 201, body: await this.walletInboxService.issueChallenge((await readJson(request)).holderDid) };
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-inbox/offers') return { status: 200, body: await this.walletInboxService.list(await readJson(request)) };
     const inboxDecision = url.pathname.match(/^\/api\/v2\/wallet-inbox\/offers\/([^/]+)\/(claim|reject)$/);
@@ -28,7 +34,7 @@ export class V2Api {
     }
     let context = null;
     try {
-      context = this.authenticator.authenticate(request, requestId);
+      context = await this.authenticator.authenticate(request, requestId);
       const result = await this.handleAuthorized(context, request, url, readJson);
       await this.logService?.info({ type: 'audit', module: 'API', action: 'V2_HTTP_REQUEST', success: true,
         correlationId: requestId, tenantId: context.tenantId, actorId: context.actorId, message: 'V2 API request completed',
@@ -44,6 +50,59 @@ export class V2Api {
 
   async handleAuthorized(context, request, url, readJson) {
     const query = { search: url.searchParams.get('search') || '', page: url.searchParams.get('page'), pageSize: url.searchParams.get('pageSize') };
+    if (request.method === 'GET' && url.pathname === '/api/v2/platform/me') {
+      return { status: 200, body: await this.organizationGovernanceService.getPlatformRoles(context) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/platform/organization-applications') {
+      return { status: 200, body: await this.organizationGovernanceService.listApplications(context, { status: url.searchParams.get('status') }) };
+    }
+    const applicationReview = url.pathname.match(/^\/api\/v2\/platform\/organization-applications\/([^/]+)\/review$/);
+    if (request.method === 'POST' && applicationReview) {
+      return { status: 200, body: await this.organizationGovernanceService.reviewApplication(
+        context, decodeURIComponent(applicationReview[1]), await readJson(request),
+      ) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/auth/workspaces') {
+      return { status: 200, body: { workspaces: await this.identityAccessService.listWorkspaces(context.actorId) } };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/switch-workspace') {
+      return { status: 200, body: await this.identityAccessService.switchWorkspace(context, (await readJson(request)).tenantId) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/logout') {
+      return { status: 200, body: await this.identityAccessService.logout(context) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/organizations') {
+      return { status: 201, body: await this.identityAccessService.createOrganization(context, await readJson(request)) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/invitations/accept') {
+      return { status: 200, body: await this.identityAccessService.acceptInvitation(context, await readJson(request)) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/auth/invitations') {
+      await this.accessService.requireAnyRole(context, roles.administrator);
+      return { status: 201, body: await this.identityAccessService.inviteMember(context, await readJson(request)) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/auth/members') {
+      await this.accessService.requireAnyRole(context, roles.administrator);
+      return { status: 200, body: await this.identityAccessService.listMembers(context) };
+    }
+    const memberRole = url.pathname.match(/^\/api\/v2\/auth\/members\/([^/]+)\/role$/);
+    if (request.method === 'POST' && memberRole) {
+      await this.accessService.requireAnyRole(context, roles.administrator);
+      return { status: 200, body: await this.identityAccessService.setMemberRole(
+        context, decodeURIComponent(memberRole[1]), await readJson(request),
+      ) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/wallet/holder-dids') {
+      return { status: 200, body: await this.holderDidDirectoryService.listMine(context) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/wallet/holder-dids') {
+      await this.accessService.requireAnyRole(context, roles.holder);
+      return { status: 201, body: await this.holderDidDirectoryService.register(context, await readJson(request)) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/holder-dids/directory-link') {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 201, body: await this.holderDidDirectoryService.linkToOrganization(context, await readJson(request)) };
+    }
     if (request.method === 'GET' && url.pathname === '/api/v2/blockchain/status') {
       await this.accessService.requireAnyRole(context, roles.reader);
       return { status: 200, body: await this.chainRegistryService.status() };

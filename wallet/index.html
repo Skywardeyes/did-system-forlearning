@@ -27,8 +27,8 @@
         <section id="view-identity" class="view active" data-view="identity">
           <div class="view-head"><div><h2>我的身份</h2><p>在此设备的浏览器中创建并管理 Holder DID。Ed25519 私钥以不可导出 CryptoKey 保存于 IndexedDB，不会被发送至签发平台。</p></div></div>
           <div class="grid">
+            <article class="card wide"><p class="section-label">UNIFIED ACCOUNT</p><h3>登录个人账号，登记 Holder DID</h3><p>这里上传的只有公开登记包。私钥继续保存在本机 IndexedDB，不会进入平台数据库。</p><div class="two-fields"><label>信证台 API 地址<input id="wallet-api" value="http://127.0.0.1:4173"></label><label>账号邮箱<input id="wallet-email" type="email" autocomplete="email"></label></div><label>账号密码<input id="wallet-password" type="password" autocomplete="current-password"></label><div class="actions"><button id="unified-registration">登录并绑定到个人空间</button></div><p class="message" id="unified-registration-message"></p><div class="security-note">登录令牌只保存在当前页面内存；登记后会清空密码输入框。组织需要先关联这个公开 DID，才能向它签发 VC。</div></article>
             <article class="card"><p class="section-label">CREATE IDENTITY</p><h3>创建本地 DID</h3><p>一个浏览器配置只保存一个主身份；重新创建会替换当前钱包身份。</p><label>身份名称<input id="identity-name" maxlength="120" value="我的钱包身份"></label><div class="actions"><button id="create-identity">本地生成密钥与 DID</button><button id="copy-registration" class="secondary" disabled>复制登记包</button></div><p class="message" id="identity-message"></p><div id="identity-output" class="identity" hidden></div></article>
-            <article class="card"><p class="section-label">REGISTER PUBLIC DID</p><h3>登记到签发平台</h3><p>发送内容只包括 DID、DID Document 和公钥。此入口仅对应当前本地演示后端。</p><label>信证台 API 地址<input id="registration-api" value="http://127.0.0.1:4173"></label><div class="actions"><button id="send-registration">发送公开登记包</button></div><p class="message" id="registration-message"></p><div class="security-note">生产环境应改用机构邀请或 Wallet-to-Issuer 注册协议，避免依赖本地演示登录接口。</div></article>
             <article class="card wide"><p class="section-label">MANUAL FALLBACK</p><h3>公开登记包</h3><p>如机构暂未接入钱包登记协议，可复制这份公开登记包交给机构；其中不含私钥、恢复材料或任何已持有凭证。</p><textarea id="registration-output" readonly placeholder="创建身份后会显示可交付给签发机构的公开登记包"></textarea></article>
           </div>
         </section>
@@ -54,6 +54,7 @@
     import { createAndStoreIdentity, loadIdentity, registrationPackage, importWalletPackage, listWalletPackages, createWalletPresentation, createInboxProof, DISCLOSABLE_PATHS, randomChallenge } from './wallet-core.js'
     let identity = null; let packages = []; let lastInboxCount = null
     const byId = (id) => document.getElementById(id)
+    const sendUnifiedRegistration = async () => { try { if (!identity) throw new Error('请先创建钱包身份'); const base = byId('wallet-api').value.replace(/\/$/, ''); const login = await fetch(`${base}/api/v2/auth/login`, { method:'POST', headers:{ 'Content-Type':'application/json' }, body:JSON.stringify({ email:byId('wallet-email').value, password:byId('wallet-password').value }) }); const loginBody = await login.json().catch(() => ({})); if (!login.ok) throw new Error(loginBody.error || '登录失败'); const response = await fetch(`${base}/api/v2/wallet/holder-dids`, { method:'POST', headers:{ 'Content-Type':'application/json', Authorization:`Bearer ${loginBody.accessToken}` }, body:JSON.stringify(registrationPackage(identity)) }); const body = await response.json().catch(() => ({})); if (!response.ok) throw new Error(body.error || '登记失败'); byId('wallet-password').value = ''; say('unified-registration-message', '公开 DID 已绑定到个人空间；Holder 私钥未上传。') } catch (error) { say('unified-registration-message', error.message || '登记失败') } }
     const say = (id, text) => { byId(id).textContent = text }
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>'"]/g, (char) => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', "'":'&#39;', '"':'&quot;' }[char]))
     const updateShell = () => { const status = byId('wallet-status'); const text = byId('wallet-status-text'); status.classList.toggle('ready', Boolean(identity)); text.textContent = identity ? `本地身份已就绪 · ${packages.length} 张凭证` : '尚未创建本地身份' }
@@ -70,7 +71,7 @@
     byId('copy-registration').onclick = async () => { try { await navigator.clipboard.writeText(byId('registration-output').value); say('identity-message', '公开登记包已复制。') } catch { say('identity-message', '复制失败，请手动复制登记包。') } }
     byId('import-package').onclick = async () => { try { const imported = await importWalletPackage(byId('package-input').value, identity); packages = await listWalletPackages(); renderPackages(); byId('credential-select').value = imported.credentialId; renderClaims(); byId('package-input').value = ''; say('package-message', 'VC 已导入本地钱包。') } catch (error) { say('package-message', error.message || '导入失败') } }
     byId('credential-select').onchange = renderClaims
-    byId('send-registration').onclick = sendRegistration
+    byId('unified-registration').onclick = sendUnifiedRegistration
     byId('refresh-inbox').onclick = () => refreshInbox()
     byId('enable-notifications').onclick = async () => { if (!('Notification' in window)) { say('inbox-message', '当前浏览器不支持系统通知，请保留此页面以接收页面提醒。'); return } const permission = await Notification.requestPermission(); say('inbox-message', permission === 'granted' ? '浏览器提醒已开启。' : '未开启浏览器提醒；新凭证仍会在收件箱页面提示。') }
     byId('new-challenge').onclick = () => { byId('challenge').value = randomChallenge() }

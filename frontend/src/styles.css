@@ -18,6 +18,19 @@ button, input, select, textarea { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .45; }
 
+.auth-page { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 1.15fr) minmax(360px, .85fr); background: var(--ink); }
+.auth-intro { padding: clamp(48px, 8vw, 110px); color: #fff; align-self: center; }
+.auth-intro h1 { max-width: 720px; margin: 12px 0 24px; font-size: clamp(34px, 5vw, 68px); line-height: 1.05; }
+.auth-intro > p:not(.eyebrow) { max-width: 680px; color: #bdc7cc; font-size: 16px; line-height: 1.8; }
+.auth-intro ul { margin-top: 32px; padding-left: 20px; color: #e7ecee; line-height: 2; }
+.auth-card { align-self: center; margin: 40px clamp(24px, 6vw, 90px) 40px 0; padding: 34px; background: #fff; box-shadow: 0 24px 80px #0005; }
+.auth-card .tabs { margin-bottom: 24px; }
+.workspace-switcher { margin: -18px 0 24px; padding: 12px; background: #26313a; }
+.workspace-switcher label { color: #aeb9c0; }
+.workspace-switcher select { min-width: 0; color: #fff; background: #17212a; border-color: #46535b; }
+.workspace-switcher small { display: block; margin-top: 8px; color: #ffd36c; line-height: 1.5; }
+.sidebar-foot button { display: block; width: 100%; margin-top: 12px; color: #dfe5e7; background: transparent; border-color: #46535b; }
+
 .app-shell { display: grid; grid-template-columns: 236px minmax(0, 1fr); min-height: 100vh; }
 .sidebar { position: sticky; top: 0; height: 100vh; padding: 30px 20px; color: #fff; background: var(--ink); display: flex; flex-direction: column; }
 .brand { display: flex; align-items: center; gap: 12px; margin: 0 6px 38px; }
@@ -88,6 +101,11 @@ td small { display: block; margin-top: 4px; color: var(--muted); }
 .empty { padding: 28px; color: var(--muted); text-align: center; }
 
 .cards { display: grid; gap: 11px; }
+.workspace-list { margin-top: 24px; }
+.workspace-list small { display: block; margin-top: 6px; color: var(--muted); }
+.workspace-list p { margin: 8px 0 0; font-size: 11px; }
+.panel hr { margin: 28px 0; border: 0; border-top: 1px solid var(--line); }
+.split form textarea, .view > .panel > label textarea { min-height: 90px; }
 .did-card { padding: 15px; border: 1px solid var(--line); }
 .did-card header { display: flex; align-items: center; gap: 9px; margin-bottom: 9px; }
 .did-card header .status { margin-left: auto; }
@@ -120,6 +138,10 @@ dialog pre { max-height: 65vh; margin: 0; padding: 18px; overflow: auto; white-s
   .stats-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 760px) {
+  .auth-page { grid-template-columns: 1fr; }
+  .auth-intro { padding: 42px 24px 20px; }
+  .auth-intro h1 { font-size: 38px; }
+  .auth-card { margin: 20px 18px 42px; }
   .app-shell { display: block; }
   .sidebar { position: static; width: 100%; height: auto; padding: 16px; }
   .brand { margin: 0 0 14px; }

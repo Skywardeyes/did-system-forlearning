@@ -8,6 +8,7 @@ import type { ChainDidRecord, DidSummary } from '../types'
 const workspace = useWorkspaceStore()
 const issuerForm = reactive({ name: '', method: 'example', serviceEndpoint: '' })
 const holderRegistration = reactive({ name: '', documentText: '' })
+const publishedHolderDid = ref('')
 const message = ref('')
 const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 const chainRecords = reactive<Record<string, ChainDidRecord>>({})
@@ -25,6 +26,10 @@ async function registerHolder() {
     holderRegistration.name = ''; holderRegistration.documentText = ''; await workspace.refresh()
     message.value = 'Holder 公开 DID 已登记；平台未接收任何私钥'
   } catch (error) { message.value = error instanceof Error ? error.message : 'Holder DID 登记失败' }
+}
+async function linkPublishedHolder() {
+  try { await didApi.linkPublishedHolder(publishedHolderDid.value); publishedHolderDid.value = ''; await workspace.refresh(); message.value = '个人钱包公开 DID 已关联到当前组织，可作为 VC Holder。' }
+  catch (error) { message.value = error instanceof Error ? error.message : '关联 Holder DID 失败' }
 }
 async function action(did: DidSummary, name: 'rotate-key' | 'deactivate') {
   if (name === 'deactivate' && !confirm('停用后不可恢复，确认继续？')) return
@@ -57,6 +62,9 @@ async function chainAction(did: DidSummary, name: 'sync' | 'deactivate') {
       </form>
       <hr>
       <header class="panel-head"><div><p>HOLDER SELF-CUSTODY</p><h2>登记个人钱包 DID</h2></div></header>
+      <form @submit.prevent="linkPublishedHolder"><label>已在个人钱包发布的 Holder DID<input v-model="publishedHolderDid" required placeholder="did:key:z6Mk..."></label><button class="primary" type="submit">从公开目录关联到当前组织</button></form>
+      <p class="security-note">推荐流程：用户先在个人钱包登录并发布公开 DID，机构再按 DID 关联。这里只复制公开 DID Document，私钥仍不上传。</p>
+      <hr>
       <form @submit.prevent="registerHolder">
         <label>显示名称（可选）<input v-model="holderRegistration.name" maxlength="120" placeholder="默认使用钱包登记包名称"></label>
         <label>钱包公开登记包<textarea v-model="holderRegistration.documentText" required placeholder="粘贴钱包导出的 holder-did-registration-v1 JSON"></textarea></label>

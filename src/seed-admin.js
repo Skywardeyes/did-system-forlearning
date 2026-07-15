@@ -10,9 +10,11 @@ export async function seedTenantAdmin(connection, {
   externalSubject = 'local-admin',
   grantCredentialReader = false,
   grantDemoOperatorRoles = false,
+  grantPlatformAdmin = false,
   now = new Date().toISOString(),
   createId = randomUUID,
 } = {}) {
+  const organizationSlug = `bootstrap-${externalSubject.toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-|-$/g, '').slice(0, 80) || 'admin'}`;
   await connection.beginTransaction();
   try {
     const [organizationRows] = await connection.execute(
@@ -21,9 +23,10 @@ export async function seedTenantAdmin(connection, {
     const organizationId = organizationRows[0]?.id || createId();
     if (!organizationRows[0]) {
       await connection.execute(
-        `INSERT INTO v2_organizations (id, name, status, created_at, updated_at, row_version)
-         VALUES (?, ?, 'active', ?, ?, 1)`,
-        [organizationId, organizationName, sqlDate(now), sqlDate(now)],
+        `INSERT INTO v2_organizations
+         (id, name, workspace_type, slug, status, verification_status, created_at, updated_at, row_version)
+         VALUES (?, ?, 'organization', ?, 'active', 'approved', ?, ?, 1)`,
+        [organizationId, organizationName, organizationSlug, sqlDate(now), sqlDate(now)],
       );
     }
 
@@ -60,8 +63,20 @@ export async function seedTenantAdmin(connection, {
         );
       }
     }
+    if (grantPlatformAdmin) {
+      const [platformRows] = await connection.execute(
+        `SELECT id FROM v2_platform_roles WHERE user_id = ? AND role_code = 'platform_admin' FOR UPDATE`, [userId],
+      );
+      if (!platformRows[0]) {
+        await connection.execute(
+          `INSERT INTO v2_platform_roles (id, user_id, role_code, status, created_at, updated_at)
+           VALUES (?, ?, 'platform_admin', 'active', ?, ?)`, [createId(), userId, sqlDate(now), sqlDate(now)],
+        );
+      }
+    }
     await connection.commit();
-    return { organizationId, userId, membershipId: membershipIds[0], membershipIds, organizationName, externalSubject, roles };
+    return { organizationId, userId, membershipId: membershipIds[0], membershipIds, organizationName, externalSubject, roles,
+      platformRoles: grantPlatformAdmin ? ['platform_admin'] : [] };
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -77,6 +92,7 @@ async function main() {
       externalSubject: process.env.BOOTSTRAP_ADMIN_SUBJECT || 'local-admin',
       grantCredentialReader: process.env.BOOTSTRAP_GRANT_CREDENTIAL_READER === 'true',
       grantDemoOperatorRoles: process.env.BOOTSTRAP_GRANT_DEMO_ROLES === 'true',
+      grantPlatformAdmin: process.env.BOOTSTRAP_GRANT_PLATFORM_ADMIN === 'true',
     });
     process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
   } finally {

@@ -25,6 +25,11 @@ export interface VerificationLog { id: string; credentialId: string | null; vali
 export interface StructuredLog { id: string; occurredAt: string; level: string; module: string; action: string; success: boolean; message: string }
 export interface SensitiveAccessLog { id: string; actorId: string; credentialId: string; purposeCode: string; correlationId: string | null; occurredAt: string }
 export interface SessionInfo {
-  mode: 'v2'; accessToken: string; expiresAt: string; actor: { id: string; externalSubject: string };
-  tenant: { id: string; name: string }; roles: string[];
+  accessToken: string; expiresAt: string; actor: { id: string; displayName?: string; email?: string; externalSubject?: string };
+  tenant: WorkspaceSummary; roles: string[]; workspaces?: WorkspaceSummary[];
+}
+
+export interface WorkspaceSummary {
+  id: string; name: string; type: 'personal' | 'organization'; slug: string; status: string;
+  verificationStatus: 'not_applicable' | 'pending' | 'approved' | 'rejected' | 'suspended'; roles: string[];
 }

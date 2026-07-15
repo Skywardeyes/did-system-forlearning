@@ -41,7 +41,7 @@ function buildDocument(did, publicJwk, version, method, serviceEndpoint = null) 
   return { document, verificationMethod };
 }
 
-function assertSelfCustodyDocument(input) {
+export function assertSelfCustodyDocument(input) {
   const did = String(input?.did || '').trim();
   const document = input?.document;
   const method = did.startsWith('did:key:') ? 'key' : null;

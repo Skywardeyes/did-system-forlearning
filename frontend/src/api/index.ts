@@ -1,13 +1,31 @@
 import { api } from './client'
-import type { ChainDidRecord, CredentialSummary, DidSummary, Page, SensitiveAccessLog, StructuredLog, VerificationLog, VerificationResult } from '../types'
+import type { ChainDidRecord, CredentialSummary, DidSummary, Page, SensitiveAccessLog, SessionInfo, StructuredLog, VerificationLog, VerificationResult, WorkspaceSummary } from '../types'
 
-export const sessionApi = { local: () => api('/api/v2/session/local', { method: 'POST', body: '{}' }) }
+export const sessionApi = {
+  local: () => api<SessionInfo>('/api/v2/session/local', { method: 'POST', body: '{}' }),
+  register: (body: object) => api<SessionInfo>('/api/v2/auth/register', { method: 'POST', body: JSON.stringify(body) }),
+  login: (body: object) => api<SessionInfo>('/api/v2/auth/login', { method: 'POST', body: JSON.stringify(body) }),
+  workspaces: () => api<{ workspaces: WorkspaceSummary[] }>('/api/v2/auth/workspaces'),
+  switchWorkspace: (tenantId: string) => api<SessionInfo>('/api/v2/auth/switch-workspace', { method: 'POST', body: JSON.stringify({ tenantId }) }),
+  logout: () => api<{ loggedOut: boolean }>('/api/v2/auth/logout', { method: 'POST', body: '{}' }),
+  createOrganization: (body: object) => api('/api/v2/auth/organizations', { method: 'POST', body: JSON.stringify(body) }),
+  invite: (body: object) => api<{ id: string; invitedEmail: string; roleCode: string; token: string; expiresAt: string }>('/api/v2/auth/invitations', { method: 'POST', body: JSON.stringify(body) }),
+  acceptInvitation: (token: string) => api('/api/v2/auth/invitations/accept', { method: 'POST', body: JSON.stringify({ token }) }),
+  members: () => api<{ items: Array<{ id: string; displayName: string; email: string; roles: string[] }> }>('/api/v2/auth/members'),
+  setMemberRole: (userId: string, roleCode: string, active: boolean) => api(`/api/v2/auth/members/${encodeURIComponent(userId)}/role`, { method: 'POST', body: JSON.stringify({ roleCode, active }) }),
+}
+export const platformApi = {
+  me: () => api<{ roles: string[] }>('/api/v2/platform/me'),
+  applications: (status = 'pending') => api<{ items: Array<{ id: string; tenantId: string; organizationName: string; organizationType: string; registrationNumber: string | null; status: string; submitter: { name: string; email: string }; submittedAt: string }> }>(`/api/v2/platform/organization-applications?status=${encodeURIComponent(status)}`),
+  review: (id: string, decision: 'approved' | 'rejected', note: string) => api(`/api/v2/platform/organization-applications/${encodeURIComponent(id)}/review`, { method: 'POST', body: JSON.stringify({ decision, note }) }),
+}
 export const didApi = {
   list: () => api<Page<DidSummary>>('/api/v2/dids?page=1&pageSize=50'),
   create: (body: object) => api<DidSummary>('/api/v2/dids', { method: 'POST', body: JSON.stringify(body) }),
   update: (id: string, body: object) => api<DidSummary>(`/api/v2/dids/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) }),
   action: (id: string, action: 'rotate-key' | 'deactivate', expectedVersion: number) => api<DidSummary>(`/api/v2/dids/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: JSON.stringify({ expectedVersion }) }),
   registerHolder: (body: object) => api<DidSummary>('/api/v2/holder-dids/registration', { method: 'POST', body: JSON.stringify(body) }),
+  linkPublishedHolder: (did: string) => api<DidSummary>('/api/v2/holder-dids/directory-link', { method: 'POST', body: JSON.stringify({ did }) }),
 }
 export const blockchainApi = {
   status: () => api<Pick<ChainDidRecord, 'enabled' | 'ready' | 'reason' | 'chainId' | 'contractAddress'>>('/api/v2/blockchain/status'),

@@ -179,7 +179,8 @@ export function createAppServer(activeService, { logService = noOpLogService, v2
     : activeService;
     const url = new URL(request.url, `http://${request.headers.host || 'localhost'}`);
     try {
-    if (url.pathname.startsWith('/api/v2/wallet-inbox/') || url.pathname === '/api/v2/session/local' || url.pathname === '/api/v2/holder-dids/registration') {
+    if (url.pathname.startsWith('/api/v2/wallet-inbox/') || url.pathname.startsWith('/api/v2/wallet/')
+      || url.pathname.startsWith('/api/v2/auth/') || url.pathname === '/api/v2/session/local' || url.pathname === '/api/v2/holder-dids/registration') {
       response.setHeader('Access-Control-Allow-Origin', 'http://127.0.0.1:5176');
       response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
       response.setHeader('Access-Control-Allow-Methods', 'POST, OPTIONS');
@@ -204,6 +205,8 @@ export function createAppServer(activeService, { logService = noOpLogService, v2
     const level = ['REQUEST_INVALID_JSON', 'REQUEST_TOO_LARGE', 'NOT_FOUND'].includes(code) ? 'warn' : 'error';
     if (code === 'AUTHENTICATION_REQUIRED') return sendJson(response, 401, { error: 'Authentication is required', code });
     if (code === 'AUTHORIZATION_DENIED') return sendJson(response, 403, { error: 'Authorization is denied', code });
+    if (code === 'ACCOUNT_TEMPORARILY_LOCKED') return sendJson(response, 429, { error: error.message, code });
+    if (['ACCOUNT_ALREADY_EXISTS', 'VERSION_CONFLICT'].includes(code)) return sendJson(response, 409, { error: error.message, code });
     await logService[level]({ type: 'system', module: code.startsWith('STORE_') ? 'STORE' : 'API', action: code, success: false, correlationId, errorCode: code, message: error.message || '请求处理失败', context: { method: request.method, pathname: url.pathname } });
     sendJson(response, code === 'REQUEST_TOO_LARGE' ? 413 : code === 'UNSUPPORTED_MEDIA_TYPE' ? 415 : conflict ? 409 : notFound || code === 'NOT_FOUND' ? 404 : 400, { error: error.message || '请求处理失败', code });
   }
