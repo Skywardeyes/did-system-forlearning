@@ -23,6 +23,13 @@ const selectedTemplate = computed(() => publishedTemplates.value.find((item) => 
 const issueForm = reactive({ issuerDid: '', holderDid: '', templateId: '', validUntil: new Date(Date.now() + 365 * 86400000).toISOString().slice(0, 16), claims: {} as Record<string, string | number | boolean> })
 const draft = reactive({ name: '', credentialType: '', fields: [newDraftField()] as TemplateDraftField[] })
 const message = ref(''); const templateMessage = ref(''); const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
+const templateQuery = ref(''); const templateSort = ref('newest')
+const issuerQuery = ref(''); const holderQuery = ref(''); const issueTemplateQuery = ref('')
+const filterBy = <T>(items: T[], query: string, values: (item: T) => unknown[]) => !query.trim() ? items : items.filter((item) => values(item).some((value) => String(value || '').toLocaleLowerCase().includes(query.trim().toLocaleLowerCase())))
+const filteredTemplates = computed(() => filterBy([...templates.value], templateQuery.value, (item) => [item.name, item.credentialType, item.status, item.version]).sort((a, b) => templateSort.value === 'name' ? a.name.localeCompare(b.name, 'zh-CN') : b.version - a.version))
+const filteredIssuers = computed(() => filterBy(issuers.value, issuerQuery.value, (item) => [item.name, item.did]))
+const filteredHolders = computed(() => filterBy(holders.value, holderQuery.value, (item) => [item.name, item.did]))
+const filteredPublishedTemplates = computed(() => filterBy(publishedTemplates.value, issueTemplateQuery.value, (item) => [item.name, item.credentialType]))
 
 function addField() { draft.fields.push(newDraftField()) }
 function removeField(index: number) { if (draft.fields.length > 1) draft.fields.splice(index, 1) }
@@ -80,14 +87,15 @@ onMounted(refreshTemplates)
         </div>
         <div class="actions"><button type="button" class="secondary" @click="addField">添加字段</button><button class="primary">创建模板草稿</button></div><p class="message">{{ templateMessage }}</p>
       </form>
-      <div class="cards"><article v-for="item in templates" :key="item.id" class="did-card"><strong>{{ item.name }} · V{{ item.version }}</strong><small>{{ item.credentialType }} · {{ item.status }}</small><p>{{ item.schema.fields.map((field) => field.label).join(' / ') }}</p><div class="actions"><button v-if="item.status === 'draft'" @click="templateAction(item, 'publish')">发布模板</button><button v-if="item.status === 'published'" class="secondary" @click="templateAction(item, 'retire')">停止新签发</button></div></article></div>
+      <div class="toolbar"><label>搜索模板<input v-model="templateQuery" type="search" placeholder="模板名称、凭证类型或状态"></label><label>排序<select v-model="templateSort"><option value="newest">版本：新到旧</option><option value="name">模板名称</option></select></label></div>
+      <div class="cards"><article v-for="item in filteredTemplates" :key="item.id" class="did-card"><strong>{{ item.name }} · V{{ item.version }}</strong><small>{{ item.credentialType }} · {{ item.status }}</small><p>{{ item.schema.fields.map((field) => field.label).join(' / ') }}</p><div class="actions"><button v-if="item.status === 'draft'" class="primary" @click="templateAction(item, 'publish')">发布模板</button><button v-if="item.status === 'published'" class="secondary" @click="templateAction(item, 'retire')">停止新签发</button></div></article><p v-if="!filteredTemplates.length" class="empty">暂无匹配模板</p></div>
     </section>
 
     <div class="split credential-layout">
       <section class="panel form-panel"><header class="panel-head"><div><p>DYNAMIC CREDENTIAL ISSUANCE</p><h2>按模板签发 VC</h2></div></header>
-        <form @submit.prevent="issue"><label>Issuer<select v-model="issueForm.issuerDid" required><option value="" disabled>选择签发方</option><option v-for="did in issuers" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
-          <label>Holder<select v-model="issueForm.holderDid" required><option value="" disabled>选择持有人</option><option v-for="did in holders" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
-          <label>凭证模板<select v-model="issueForm.templateId" required @change="resetClaims"><option value="" disabled>选择已发布模板</option><option v-for="item in publishedTemplates" :key="item.id" :value="item.id">{{ item.name }} · V{{ item.version }}</option></select></label>
+        <form @submit.prevent="issue"><label>搜索签发方<input v-model="issuerQuery" type="search" placeholder="输入机构名称或 DID"></label><label>Issuer<select v-model="issueForm.issuerDid" required><option value="" disabled>选择签发方</option><option v-for="did in filteredIssuers" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
+          <label>搜索持有人<input v-model="holderQuery" type="search" placeholder="输入姓名或 DID"></label><label>Holder<select v-model="issueForm.holderDid" required><option value="" disabled>选择持有人</option><option v-for="did in filteredHolders" :key="did.id" :value="did.did">{{ did.name }}</option></select></label>
+          <label>搜索凭证模板<input v-model="issueTemplateQuery" type="search" placeholder="输入模板名称或凭证类型"></label><label>凭证模板<select v-model="issueForm.templateId" required @change="resetClaims"><option value="" disabled>选择已发布模板</option><option v-for="item in filteredPublishedTemplates" :key="item.id" :value="item.id">{{ item.name }} · V{{ item.version }}</option></select></label>
           <template v-for="field in selectedTemplate?.schema.fields || []" :key="field.key">
             <label v-if="field.type === 'boolean'">{{ field.label }}<select v-model="issueForm.claims[field.key]" :required="field.required"><option :value="true">是</option><option :value="false">否</option></select></label>
             <label v-else-if="field.type === 'enum'">{{ field.label }}<select v-model="issueForm.claims[field.key]" :required="field.required"><option value="" disabled>请选择</option><option v-for="option in field.options" :key="option" :value="option">{{ option }}</option></select></label>

@@ -80,6 +80,7 @@ test('personal wallet imports a dynamic VC and creates a holder-bound combinatio
   const skillDelivery = await call(request, session, `/api/v2/credentials/${encodeURIComponent(skillIssued.id)}/wallet-package`, {});
 
   await wallet.locator('[data-view-link="credentials"]').click();
+  await wallet.getByText('高级工具：手动导入交付包').click();
   await wallet.locator('#package-input').fill(JSON.stringify(delivery));
   await wallet.locator('#import-package').click();
   await expect(wallet.locator('#package-message')).toContainText('VC 已导入本地钱包');

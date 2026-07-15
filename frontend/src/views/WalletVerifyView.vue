@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import VerificationReport from '../components/VerificationReport.vue'
 import { credentialApi } from '../api'
 import type { VerificationPresentationLedger, VerificationResult } from '../types'
@@ -10,6 +10,13 @@ const result = ref<VerificationResult | null>(null)
 const message = ref('等待 Holder 碰一碰…')
 const ledger = ref<VerificationPresentationLedger[]>([])
 const verifying = ref(false)
+const ledgerQuery = ref('')
+const ledgerOutcome = ref('all')
+const ledgerSort = ref('newest')
+const filteredLedger = computed(() => [...ledger.value]
+  .filter((entry) => ledgerOutcome.value === 'all' || entry.outcome === ledgerOutcome.value)
+  .filter((entry) => !ledgerQuery.value.trim() || [entry.holderDid, entry.id, entry.outcome, ...entry.credentials.flatMap((item) => [item.credentialId, item.credentialType, item.issuerDid])].some((value) => String(value || '').toLocaleLowerCase().includes(ledgerQuery.value.trim().toLocaleLowerCase())))
+  .sort((a, b) => (ledgerSort.value === 'newest' ? -1 : 1) * (+new Date(a.occurredAt) - +new Date(b.occurredAt))))
 let timer: number | undefined
 
 async function loadLedger() { ledger.value = (await credentialApi.walletPresentationLedger()).items }
@@ -66,8 +73,10 @@ onBeforeUnmount(() => { if (timer) window.clearInterval(timer) })
     </div>
     <section class="panel" style="grid-column:1 / -1">
       <header class="panel-head"><div><p>VERIFICATION LEDGER</p><h2>组合验证台账</h2></div><button @click="loadLedger">刷新</button></header>
+      <div class="toolbar"><label>搜索<input v-model="ledgerQuery" type="search" placeholder="Holder、凭证名称、签发方或记录编号"></label><label>结果<select v-model="ledgerOutcome"><option value="all">全部结果</option><option value="valid">验证通过</option><option value="invalid">验证失败</option><option value="pending">待验证</option></select></label><label>排序<select v-model="ledgerSort"><option value="newest">时间：新到旧</option><option value="oldest">时间：旧到新</option></select></label></div>
       <div class="table-wrap"><table><thead><tr><th>时间</th><th>结果</th><th>Holder</th><th>凭证数</th><th>逐张证据</th></tr></thead><tbody>
-        <tr v-for="entry in ledger" :key="entry.id"><td>{{ new Date(entry.occurredAt).toLocaleString() }}<small>{{ entry.id }}</small></td><td>{{ entry.outcome }}</td><td>{{ entry.holderDid }}</td><td>{{ entry.credentialCount }}</td><td><div v-for="credential in entry.credentials" :key="credential.credentialId || credential.issuerDid || ''">{{ credential.credentialType }} · {{ credential.outcome }} · {{ credential.disclosedPaths.join('、') }}</div></td></tr>
+        <tr v-for="entry in filteredLedger" :key="entry.id"><td>{{ new Date(entry.occurredAt).toLocaleString() }}<small>{{ entry.id }}</small></td><td><span class="status" :class="entry.outcome">{{ entry.outcome === 'valid' ? '通过' : entry.outcome === 'pending' ? '待验证' : '失败' }}</span></td><td>{{ entry.holderDid }}</td><td>{{ entry.credentialCount }}</td><td><div v-for="credential in entry.credentials" :key="credential.credentialId || credential.issuerDid || ''">{{ credential.credentialType }} · {{ credential.outcome }} · {{ credential.disclosedPaths.join('、') }}</div></td></tr>
+        <tr v-if="!filteredLedger.length"><td colspan="5" class="empty">暂无匹配的验证记录</td></tr>
       </tbody></table></div><p v-if="!ledger.length" class="empty">暂无组合验证记录。</p>
     </section>
   </div>

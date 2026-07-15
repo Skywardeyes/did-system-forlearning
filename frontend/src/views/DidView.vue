@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import JsonDialog from '../components/JsonDialog.vue'
 import { blockchainApi, didApi } from '../api'
 import { useWorkspaceStore } from '../stores/workspace'
@@ -7,12 +7,22 @@ import type { ChainDidRecord, DidSummary } from '../types'
 
 const workspace = useWorkspaceStore()
 const issuerForm = reactive({ name: '', method: 'example', serviceEndpoint: '' })
-const holderRegistration = reactive({ name: '', documentText: '' })
-const publishedHolderDid = ref('')
 const message = ref('')
 const dialog = ref<InstanceType<typeof JsonDialog> | null>(null)
 const chainRecords = reactive<Record<string, ChainDidRecord>>({})
 const holderRequests = ref<Array<{ id: string; holderDid: string; holderDisplayName: string; message: string | null; status: string; createdAt: string }>>([])
+const didQuery = ref('')
+const didRole = ref('all')
+const didSort = ref('name')
+const requestQuery = ref('')
+const requestSort = ref('newest')
+const filteredDids = computed(() => [...workspace.dids]
+  .filter((item) => didRole.value === 'all' || item.role === didRole.value)
+  .filter((item) => !didQuery.value.trim() || [item.name, item.did, item.method, item.status].some((value) => String(value).toLocaleLowerCase().includes(didQuery.value.trim().toLocaleLowerCase())))
+  .sort((a, b) => didSort.value === 'status' ? a.status.localeCompare(b.status) : didSort.value === 'role' ? a.role.localeCompare(b.role) : a.name.localeCompare(b.name, 'zh-CN')))
+const filteredRequests = computed(() => [...holderRequests.value]
+  .filter((item) => !requestQuery.value.trim() || [item.holderDisplayName, item.holderDid, item.message, item.status].some((value) => String(value || '').toLocaleLowerCase().includes(requestQuery.value.trim().toLocaleLowerCase())))
+  .sort((a, b) => (requestSort.value === 'newest' ? -1 : 1) * (+new Date(a.createdAt) - +new Date(b.createdAt))))
 
 async function loadHolderRequests() {
   try { holderRequests.value = (await didApi.holderRequests()).items }
@@ -28,18 +38,6 @@ async function createIssuerDid() {
     await didApi.create({ ...issuerForm, role: 'issuer', serviceEndpoint: issuerForm.serviceEndpoint || undefined })
     issuerForm.name = ''; await workspace.refresh(); message.value = 'Issuer DID 创建成功，机构私钥由 KMS 管理'
   } catch (error) { message.value = error instanceof Error ? error.message : '创建失败' }
-}
-async function registerHolder() {
-  try {
-    const value = JSON.parse(holderRegistration.documentText) as { did?: string; document?: object; name?: string }
-    await didApi.registerHolder({ did: value.did, document: value.document, name: holderRegistration.name || value.name || '外部 Holder 钱包' })
-    holderRegistration.name = ''; holderRegistration.documentText = ''; await workspace.refresh()
-    message.value = 'Holder 公开 DID 已登记；平台未接收任何私钥'
-  } catch (error) { message.value = error instanceof Error ? error.message : 'Holder DID 登记失败' }
-}
-async function linkPublishedHolder() {
-  try { await didApi.linkPublishedHolder(publishedHolderDid.value); publishedHolderDid.value = ''; await workspace.refresh(); message.value = '个人钱包公开 DID 已关联到当前组织，可作为 VC Holder。' }
-  catch (error) { message.value = error instanceof Error ? error.message : '关联 Holder DID 失败' }
 }
 async function action(did: DidSummary, name: 'rotate-key' | 'deactivate') {
   if (name === 'deactivate' && !confirm('停用后不可恢复，确认继续？')) return
@@ -62,7 +60,8 @@ onMounted(loadHolderRequests)
 </script>
 
 <template>
-  <div class="view split">
+  <div class="view">
+    <div class="split">
     <section class="panel form-panel">
       <header class="panel-head"><div><p>INSTITUTION IDENTITY</p><h2>创建 Issuer DID</h2></div></header>
       <form @submit.prevent="createIssuerDid">
@@ -71,44 +70,27 @@ onMounted(loadHolderRequests)
         <label>服务地址（可选）<input v-model="issuerForm.serviceEndpoint" placeholder="https://issuer.example.org/did"></label>
         <button class="primary" type="submit">创建机构 DID</button>
       </form>
-      <hr>
-      <header class="panel-head"><div><p>HOLDER SELF-CUSTODY</p><h2>登记个人钱包 DID</h2></div></header>
-      <form @submit.prevent="linkPublishedHolder"><label>已在个人钱包发布的 Holder DID<input v-model="publishedHolderDid" required placeholder="did:key:z6Mk..."></label><button class="primary" type="submit">从公开目录关联到当前组织</button></form>
-      <p class="security-note">推荐流程：用户先在个人钱包登录并发布公开 DID，机构再按 DID 关联。这里只复制公开 DID Document，私钥仍不上传。</p>
-      <hr>
       <header class="panel-head"><div><p>HOLDER REQUEST INBOX</p><h2>Holder 关联申请</h2></div><button type="button" @click="loadHolderRequests">刷新</button></header>
+      <div class="toolbar"><label>搜索申请<input v-model="requestQuery" type="search" placeholder="姓名、DID 或申请说明"></label><label>排序<select v-model="requestSort"><option value="newest">申请时间：新到旧</option><option value="oldest">申请时间：旧到新</option></select></label></div>
       <div class="cards">
-        <article v-for="request in holderRequests" :key="request.id" class="did-card">
+        <article v-for="request in filteredRequests" :key="request.id" class="did-card">
           <header><strong>{{ request.holderDisplayName }}</strong><span class="status" :class="request.status">{{ request.status }}</span></header>
           <code>{{ request.holderDid }}</code><p v-if="request.message">申请说明：{{ request.message }}</p><small>{{ new Date(request.createdAt).toLocaleString() }}</small>
           <div v-if="request.status === 'pending'" class="actions"><button class="primary" @click="decideHolderRequest(request.id, 'accept')">接受并关联</button><button class="danger" @click="decideHolderRequest(request.id, 'reject')">拒绝</button></div>
         </article>
-        <p v-if="!holderRequests.length" class="empty">暂无 Holder 关联申请。</p>
+        <p v-if="!filteredRequests.length" class="empty">暂无匹配的 Holder 关联申请。</p>
       </div>
-      <p class="security-note">接受后系统从公共目录复制该 Holder 的公开 DID Document 到当前组织，不接收 Holder 私钥。</p>
-      <hr>
-      <form @submit.prevent="registerHolder">
-        <label>显示名称（可选）<input v-model="holderRegistration.name" maxlength="120" placeholder="默认使用钱包登记包名称"></label>
-        <label>钱包公开登记包<textarea v-model="holderRegistration.documentText" required placeholder="粘贴钱包导出的 holder-did-registration-v1 JSON"></textarea></label>
-        <button class="primary" type="submit">登记公开 DID</button>
-      </form>
-      <p class="security-note">个人 Holder 私钥只存在于用户钱包。本平台只保存 DID Document 中的公开密钥，无法代替个人签名。</p>
       <p class="message">{{ message }}</p>
     </section>
     <section class="panel">
       <header class="panel-head"><div><p>PUBLIC IDENTITIES</p><h2>DID 公开解析材料</h2></div><span>{{ workspace.dids.length }} 个</span></header>
-      <div class="cards">
-        <article v-for="did in workspace.dids" :key="did.id" class="did-card">
-          <header><span class="tag">{{ did.role }}</span><strong>{{ did.name }}</strong><span class="status" :class="did.status">{{ did.status }}</span></header>
-          <code>{{ did.did }}</code><small>{{ did.method }} · DID v{{ did.version }} · {{ did.keyCustody === 'holder_self_custody' ? '个人钱包自托管' : '机构 KMS 托管' }}</small>
-          <div class="actions"><button @click="dialog?.open('DID Document · 公开验证材料', did.document)">查看 Document</button>
-            <button v-if="did.capabilities.rotateKey && did.status === 'active'" @click="action(did, 'rotate-key')">轮换密钥</button>
-            <button v-if="did.capabilities.deactivate && did.status === 'active'" class="danger" @click="action(did, 'deactivate')">停用</button></div>
-          <div v-if="did.role === 'issuer'" class="chain-anchor"><small>本地链上锚定：{{ chainRecords[did.id]?.registered ? `已登记 · v${chainRecords[did.id].version}` : '尚未查询 / 尚未登记' }}</small>
-            <div class="actions"><button @click="loadChainState(did)">查询链上状态</button><button v-if="did.status === 'active'" @click="chainAction(did, 'sync')">上链登记 / 同步</button><button v-if="did.status === 'deactivated' && chainRecords[did.id]?.registered && !chainRecords[did.id]?.deactivated" class="danger" @click="chainAction(did, 'deactivate')">写入链上停用</button></div></div>
-        </article>
-      </div>
+      <div class="toolbar"><label>搜索<input v-model="didQuery" type="search" placeholder="名称、DID 或方法"></label><label>角色<select v-model="didRole"><option value="all">全部角色</option><option value="issuer">Issuer</option><option value="holder">Holder</option></select></label><label>排序<select v-model="didSort"><option value="name">名称</option><option value="role">角色</option><option value="status">状态</option></select></label></div>
+      <div class="table-wrap"><table><thead><tr><th>身份</th><th>DID 与托管</th><th>状态</th><th>操作</th></tr></thead><tbody>
+        <tr v-for="did in filteredDids" :key="did.id"><td><strong>{{ did.name }}</strong><small>{{ did.role }} · {{ did.method }} · v{{ did.version }}</small></td><td><small>{{ did.did }}</small><small>{{ did.keyCustody === 'holder_self_custody' ? '个人钱包自托管' : '机构 KMS 托管' }}</small></td><td><span class="status" :class="did.status">{{ did.status }}</span><small v-if="did.role === 'issuer'">链上：{{ chainRecords[did.id]?.registered ? `已登记 v${chainRecords[did.id].version}` : '未查询' }}</small></td><td class="actions"><button @click="dialog?.open('DID Document · 公开验证材料', did.document)">查看</button><button v-if="did.capabilities.rotateKey && did.status === 'active'" @click="action(did, 'rotate-key')">轮换</button><button v-if="did.role === 'issuer'" @click="loadChainState(did)">查链</button><button v-if="did.role === 'issuer' && did.status === 'active'" @click="chainAction(did, 'sync')">同步上链</button><button v-if="did.capabilities.deactivate && did.status === 'active'" class="danger" @click="action(did, 'deactivate')">停用</button></td></tr>
+        <tr v-if="!filteredDids.length"><td colspan="4" class="empty">暂无匹配 DID</td></tr>
+      </tbody></table></div>
     </section>
+    </div>
     <JsonDialog ref="dialog" />
   </div>
 </template>
