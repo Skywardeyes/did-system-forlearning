@@ -38,7 +38,7 @@ class DisclosureMaterialRepository {
 }
 class Kms { constructor() { this.calls = []; } async signPayload({ keyId, payload }) { this.calls.push({ keyId, payload: structuredClone(payload) }); return 'signature-from-kms'; } async signBytes() { return 'jwt-signature-from-kms'; } }
 
-function createService() {
+function createService({ template = null } = {}) {
   const dids = [
     { id: 'issuer-id', did: 'did:example:issuer', role: 'issuer', status: 'active', keyVersion: 1 },
     { id: 'holder-id', did: 'did:example:holder', role: 'holder', status: 'active', keyVersion: 1 },
@@ -46,7 +46,8 @@ function createService() {
   const credentialRepository = new CredentialRepository(); const events = new EventRepository(); const kms = new Kms(); const materials = new DisclosureMaterialRepository();
   return {
     service: new V2CredentialService({ unitOfWork: new UnitOfWork(), didRepository: new DidRepository(dids),
-      didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, disclosureMaterialRepository: materials, kms }),
+      didKeyVersionRepository: new KeyRepository(), credentialRepository, credentialStatusEventRepository: events, disclosureMaterialRepository: materials, kms,
+      credentialTemplateRepository: template ? { async findById(_operation, id) { return id === template.id ? structuredClone(template) : null; } } : null }),
     credentialRepository, events, kms, materials,
   };
 }
@@ -101,4 +102,25 @@ test('V2 issuer can create a holder wallet delivery package without any Holder p
   const payload = JSON.parse(Buffer.from(walletPackage.sdJwt.issuerJwt.split('.')[1], 'base64url').toString('utf8'));
   assert.equal(payload.sub, walletPackage.holderDid);
   assert.equal(JSON.stringify(walletPackage).includes('privateJwk'), false);
+});
+
+test('V2 issuer signs arbitrary template claims and emits a dynamic wallet package', async () => {
+  const template = { id: 'template-1', name: '大学毕业证书', credentialType: 'UniversityDegreeCredential', version: 3,
+    status: 'published', schemaHash: 'a'.repeat(64), schema: { fields: [
+      { key: 'degree', label: '学历层次', type: 'enum', required: true, order: 1, options: ['本科', '硕士'] },
+      { key: 'major', label: '专业', type: 'string', required: true, order: 2 },
+      { key: 'gpa', label: '绩点', type: 'number', required: false, order: 3 },
+    ] } };
+  const { service } = createService({ template });
+  const issued = await service.issueCredential(context, { templateId: template.id, issuerDid: 'did:example:issuer', holderDid: 'did:example:holder',
+    claims: { degree: '本科', major: '计算机科学' }, validUntil: inOneDay });
+  assert.deepEqual(issued.credential.credentialSubject, { id: 'did:example:holder', degree: '本科', major: '计算机科学' });
+  assert.equal(issued.credential.credentialSchema.version, 3);
+  const walletPackage = await service.createWalletPackage(context, issued.id);
+  assert.equal(walletPackage.format, 'wallet-vc-package-v2');
+  assert.deepEqual(walletPackage.display.fields.map((field) => field.key), ['degree', 'major']);
+  assert.equal(walletPackage.sdJwt.disclosures['credentialSubject.gpa'], undefined);
+  const payload = JSON.parse(Buffer.from(walletPackage.sdJwt.issuerJwt.split('.')[1], 'base64url').toString('utf8'));
+  assert.equal(payload.schema_id, template.id);
+  assert.equal(payload.schema_version, 3);
 });

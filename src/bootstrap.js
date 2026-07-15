@@ -35,6 +35,10 @@ import { OrganizationGovernanceRepository } from './repositories/organization-go
 import { OrganizationGovernanceService } from './services/organization-governance-service.js';
 import { HolderDidDirectoryRepository } from './repositories/holder-did-directory-repository.js';
 import { HolderDidDirectoryService } from './services/holder-did-directory-service.js';
+import { CredentialTemplateRepository } from './repositories/credential-template-repository.js';
+import { CredentialTemplateService } from './services/credential-template-service.js';
+import { PublicTrustRepository } from './repositories/public-trust-repository.js';
+import { VerificationPresentationRepository } from './repositories/verification-presentation-repository.js';
 import { V2Api } from './v2-api.js';
 import { WalletInboxService } from './services/wallet-inbox-service.js';
 import { ChainRegistryService } from './services/chain-registry-service.js';
@@ -45,7 +49,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
   const pool = createPool({ ...config.database, ssl: config.database.ssl ? {} : undefined, connectionLimit: 5 });
   try {
     await pool.execute('SELECT 1');
-    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 10 });
+    await assertSupportedSchema(pool, { requiredVersion: config.application.dataMode === 'v1' ? 1 : 11 });
     const envelopeCrypto = createEnvelopeCrypto({ keys: new Map([[config.kms.activeKeyId, config.kms.masterKey]]), activeKeyId: config.kms.activeKeyId });
     const legacyEnabled = config.application.dataMode !== 'v2';
     const legacyStore = legacyEnabled ? new MySqlStore(pool, { envelopeCrypto }) : null;
@@ -68,12 +72,17 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const walletOfferRepository = new WalletCredentialOfferRepository({ envelopeCrypto });
       const sensitiveAccessLogRepository = new SensitiveAccessLogRepository();
       const transactionalKms = new TransactionalLocalKms(envelopeCrypto);
-      const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, kms: transactionalKms });
+      const publicTrustRepository = new PublicTrustRepository();
+      const credentialTemplateRepository = new CredentialTemplateRepository();
+      const presentationRepository = new VerificationPresentationRepository({ envelopeCrypto });
+      const credentialTemplateService = new CredentialTemplateService({ unitOfWork, repository: credentialTemplateRepository });
+      const didService = new V2DidService({ unitOfWork, didRepository, didKeyVersionRepository, publicTrustRepository, kms: transactionalKms });
       const credentialService = new V2CredentialService({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository,
-        credentialStatusEventRepository, disclosureMaterialRepository, walletOfferRepository, kms: transactionalKms });
+        credentialStatusEventRepository, disclosureMaterialRepository, walletOfferRepository, credentialTemplateRepository,
+        publicTrustRepository, kms: transactionalKms });
       const disclosureService = new V2DisclosureService({ unitOfWork, credentialRepository, disclosureMaterialRepository, verificationLogRepository });
       const verificationService = new V2VerificationService({ unitOfWork, didRepository, didKeyVersionRepository,
-        credentialRepository, verificationLogRepository, verifierChallengeRepository });
+        credentialRepository, verificationLogRepository, verifierChallengeRepository, publicTrustRepository, presentationRepository });
       const credentialAccessService = new V2CredentialAccessService({ unitOfWork, credentialRepository, sensitiveAccessLogRepository });
       const accessService = new V2AccessService({ unitOfWork, membershipRepository: new MembershipRepository() });
       const signatureAuthenticator = new Hs256RequestAuthenticator({ secret: config.auth.jwtHs256Secret });
@@ -92,7 +101,7 @@ export async function bootstrap(env = process.env, { createPool = mysql.createPo
       const chainRegistryService = new ChainRegistryService({ blockchain: config.blockchain });
       v2Api = new V2Api({ authenticator, accessService, didService, credentialService, disclosureService,
         verificationService, credentialAccessService, identityAccessService, organizationGovernanceService,
-        holderDidDirectoryService, localSessionService, logService, walletInboxService, chainRegistryService });
+        holderDidDirectoryService, credentialTemplateService, localSessionService, logService, walletInboxService, chainRegistryService });
     }
     return { server: createAppServer(service, { logService, v2Api, legacyApiEnabled: legacyEnabled,
       requireHttps: config.security.requireHttps, serveFrontend: config.application.serveFrontend }), pool,

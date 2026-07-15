@@ -82,10 +82,11 @@ function publicDid(did) {
 }
 
 export class V2DidService {
-  constructor({ unitOfWork, didRepository, didKeyVersionRepository, kms }) {
+  constructor({ unitOfWork, didRepository, didKeyVersionRepository, publicTrustRepository = null, kms }) {
     this.unitOfWork = unitOfWork;
     this.didRepository = didRepository;
     this.didKeyVersionRepository = didKeyVersionRepository;
+    this.publicTrustRepository = publicTrustRepository;
     this.kms = kms;
   }
 
@@ -110,10 +111,12 @@ export class V2DidService {
       };
       await this.didRepository.create(operation, identity);
       const persistedKey = await this.kms.persistSigningKey({ connection: operation.connection, did, version: 1, keyMaterial, createdAt });
-      await this.didKeyVersionRepository.create(operation, {
+      const key = {
         id: randomUUID(), didId: identity.id, version: 1, kmsKeyId: persistedKey.keyId, verificationMethod,
         publicJwk: persistedKey.publicJwk, status: 'active', createdAt, retiredAt: null,
-      });
+      };
+      await this.didKeyVersionRepository.create(operation, key);
+      await this.publicTrustRepository?.publishDid(operation, identity, key);
       return publicDid(identity);
     });
   }
@@ -136,6 +139,7 @@ export class V2DidService {
         createdAt, updatedAt: createdAt,
       };
       await this.didRepository.create(operation, identity);
+      await this.publicTrustRepository?.publishDid(operation, identity);
       return publicDid(identity);
     });
   }
@@ -168,7 +172,9 @@ export class V2DidService {
       const updatedAt = new Date().toISOString();
       const { document } = buildDocument(did.did, did.document.verificationMethod[0].publicKeyJwk, did.keyVersion, did.method, serviceEndpoint);
       const updated = { ...did, version: did.version + 1, document, metadata: { ...did.metadata, name, serviceEndpoint }, updatedAt };
-      return publicDid(await this.didRepository.save(operation, updated, did.rowVersion));
+      const saved = await this.didRepository.save(operation, updated, did.rowVersion);
+      await this.publicTrustRepository?.publishDid(operation, saved);
+      return publicDid(saved);
     });
   }
 
@@ -186,13 +192,17 @@ export class V2DidService {
       const updated = { ...did, version: did.version + 1, keyVersion: nextKeyVersion, document, updatedAt: rotatedAt };
       await this.didRepository.save(operation, updated, did.rowVersion);
       await this.didKeyVersionRepository.retire(operation, did.id, currentKey.version, rotatedAt);
+      await this.publicTrustRepository?.retireDidKey(operation, did.did, currentKey.version, rotatedAt);
       await this.kms.retireSigningKey({ connection: operation.connection, keyId: currentKey.kmsKeyId, retiredAt: rotatedAt });
       const persistedKey = await this.kms.persistSigningKey({ connection: operation.connection, did: did.did, version: nextKeyVersion, keyMaterial, createdAt: rotatedAt });
-      await this.didKeyVersionRepository.create(operation, {
+      const nextKey = {
         id: randomUUID(), didId: did.id, version: nextKeyVersion, kmsKeyId: persistedKey.keyId, verificationMethod,
         publicJwk: persistedKey.publicJwk, status: 'active', createdAt: rotatedAt, retiredAt: null,
-      });
-      return publicDid({ ...updated, rowVersion: did.rowVersion + 1 });
+      };
+      await this.didKeyVersionRepository.create(operation, nextKey);
+      const saved = { ...updated, rowVersion: did.rowVersion + 1 };
+      await this.publicTrustRepository?.publishDid(operation, saved, nextKey);
+      return publicDid(saved);
     });
   }
 
@@ -208,8 +218,11 @@ export class V2DidService {
         metadata: { ...did.metadata, deactivatedAt } };
       await this.didRepository.save(operation, updated, did.rowVersion);
       await this.didKeyVersionRepository.retire(operation, did.id, currentKey.version, deactivatedAt);
+      await this.publicTrustRepository?.retireDidKey(operation, did.did, currentKey.version, deactivatedAt);
       await this.kms.retireSigningKey({ connection: operation.connection, keyId: currentKey.kmsKeyId, retiredAt: deactivatedAt });
-      return publicDid({ ...updated, rowVersion: did.rowVersion + 1 });
+      const saved = { ...updated, rowVersion: did.rowVersion + 1 };
+      await this.publicTrustRepository?.publishDid(operation, saved);
+      return publicDid(saved);
     });
   }
 }

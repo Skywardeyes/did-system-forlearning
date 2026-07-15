@@ -1,5 +1,5 @@
 import { api } from './client'
-import type { ChainDidRecord, CredentialSummary, DidSummary, Page, SensitiveAccessLog, SessionInfo, StructuredLog, VerificationLog, VerificationResult, WorkspaceSummary } from '../types'
+import type { ChainDidRecord, CredentialSummary, CredentialTemplate, DidSummary, Page, SensitiveAccessLog, SessionInfo, StructuredLog, VerificationLog, VerificationPresentationLedger, VerificationResult, WorkspaceSummary } from '../types'
 
 export const sessionApi = {
   local: () => api<SessionInfo>('/api/v2/session/local', { method: 'POST', body: '{}' }),
@@ -46,6 +46,13 @@ export const credentialApi = {
   verifySdJwt: (sdJwt: string) => api<VerificationResult>('/api/v2/sd-jwt/verify', { method: 'POST', body: JSON.stringify({ sdJwt }) }),
   createWalletChallenge: (body: { domain: string; ttlSeconds?: number }) => api<{ challenge: string; domain: string; expiresAt: string; ttlSeconds: number }>('/api/v2/wallet-challenges', { method: 'POST', body: JSON.stringify(body) }),
   verifyWalletPresentation: (presentation: object) => api<VerificationResult>('/api/v2/wallet-presentations/verify', { method: 'POST', body: JSON.stringify({ presentation }) }),
+  walletPresentationLedger: () => api<Page<VerificationPresentationLedger>>('/api/v2/verification-presentations?page=1&pageSize=20'),
+}
+export const credentialTemplateApi = {
+  list: (status = '') => api<Page<CredentialTemplate>>(`/api/v2/credential-templates?page=1&pageSize=50${status ? `&status=${encodeURIComponent(status)}` : ''}`),
+  create: (body: object) => api<CredentialTemplate>('/api/v2/credential-templates', { method: 'POST', body: JSON.stringify(body) }),
+  publish: (id: string) => api<CredentialTemplate>(`/api/v2/credential-templates/${encodeURIComponent(id)}/publish`, { method: 'POST', body: '{}' }),
+  retire: (id: string) => api<CredentialTemplate>(`/api/v2/credential-templates/${encodeURIComponent(id)}/retire`, { method: 'POST', body: '{}' }),
 }
 export const ledgerApi = {
   verification: () => api<Page<VerificationLog>>('/api/v2/verification-logs?page=1&pageSize=20'),

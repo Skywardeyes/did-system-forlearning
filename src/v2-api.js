@@ -11,6 +11,7 @@ import { localDemoWalletIdentity } from './demo-wallet-identity.js';
 export class V2Api {
   constructor({ authenticator, accessService, didService, credentialService, disclosureService, verificationService,
     credentialAccessService, identityAccessService = null, organizationGovernanceService = null, holderDidDirectoryService = null,
+    credentialTemplateService = null,
     localSessionService = null, logService = null, walletInboxService = null, chainRegistryService = null }) {
     this.authenticator = authenticator; this.accessService = accessService; this.didService = didService;
     this.credentialService = credentialService; this.disclosureService = disclosureService;
@@ -19,6 +20,7 @@ export class V2Api {
     this.identityAccessService = identityAccessService;
     this.organizationGovernanceService = organizationGovernanceService;
     this.holderDidDirectoryService = holderDidDirectoryService;
+    this.credentialTemplateService = credentialTemplateService;
   }
 
   async handle(request, url, requestId, readJson) {
@@ -50,6 +52,19 @@ export class V2Api {
 
   async handleAuthorized(context, request, url, readJson) {
     const query = { search: url.searchParams.get('search') || '', page: url.searchParams.get('page'), pageSize: url.searchParams.get('pageSize') };
+    if (request.method === 'GET' && url.pathname === '/api/v2/credential-templates') {
+      await this.accessService.requireAnyRole(context, roles.reader);
+      return { status: 200, body: await this.credentialTemplateService.list(context, { ...query, status: url.searchParams.get('status') || null }) };
+    }
+    if (request.method === 'POST' && url.pathname === '/api/v2/credential-templates') {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 201, body: await this.credentialTemplateService.create(context, await readJson(request)) };
+    }
+    const templateAction = url.pathname.match(/^\/api\/v2\/credential-templates\/([^/]+)\/(publish|retire)$/);
+    if (request.method === 'POST' && templateAction) {
+      await this.accessService.requireAnyRole(context, roles.issuer);
+      return { status: 200, body: await this.credentialTemplateService[templateAction[2]](context, decodeURIComponent(templateAction[1])) };
+    }
     if (request.method === 'GET' && url.pathname === '/api/v2/platform/me') {
       return { status: 200, body: await this.organizationGovernanceService.getPlatformRoles(context) };
     }
@@ -173,7 +188,14 @@ export class V2Api {
     }
     if (request.method === 'POST' && url.pathname === '/api/v2/wallet-presentations/verify') {
       await this.accessService.requireAnyRole(context, roles.verifier);
-      return { status: 200, body: await this.verificationService.verifyWalletPresentation(context, (await readJson(request)).presentation) };
+      const presentation = (await readJson(request)).presentation;
+      return { status: 200, body: presentation?.type === 'WalletBoundMultiSdJwtPresentation2026'
+        ? await this.verificationService.verifyMultiWalletPresentation(context, presentation)
+        : await this.verificationService.verifyWalletPresentation(context, presentation) };
+    }
+    if (request.method === 'GET' && url.pathname === '/api/v2/verification-presentations') {
+      await this.accessService.requireAnyRole(context, roles.verifier);
+      return { status: 200, body: await this.verificationService.listPresentations(context, query) };
     }
     if (request.method === 'GET' && url.pathname === '/api/v2/verification-logs') {
       await this.accessService.requireAnyRole(context, roles.reader);

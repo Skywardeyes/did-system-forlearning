@@ -17,10 +17,25 @@ export interface CredentialSummary {
   id: string; status: string; issuerDidId: string; holderDidId: string; issuedAt: string;
   validFrom: string; validUntil: string; rowVersion: number; contentProtected: true;
   selectiveDisclosureAvailable: boolean; sdJwtAvailable: boolean;
+  templateId?: string | null; templateVersion?: number | null; schemaHash?: string | null;
 }
 
+export interface CredentialTemplateField { key: string; label: string; type: 'string' | 'number' | 'boolean' | 'date' | 'datetime' | 'enum'; required: boolean; order: number; options?: string[] }
+export interface CredentialTemplate { id: string; name: string; credentialType: string; version: number; status: 'draft' | 'published' | 'retired'; schemaHash: string; schema: { name: string; credentialType: string; fields: CredentialTemplateField[] } }
+
 export interface VerificationCheck { key: string; label: string; passed: boolean; detail: string }
-export interface VerificationResult { valid: boolean; credentialId: string | null; checkedAt: string; checks: VerificationCheck[] }
+export interface VerifiedPresentationCredential {
+  credentialId: string | null; issuerDid: string | null; credentialType: string | null;
+  outcome: 'valid' | 'invalid'; disclosedPaths: string[]; failedChecks: string[];
+}
+export interface VerificationResult {
+  valid: boolean; presentationId?: string; credentialId: string | null; checkedAt: string;
+  checks: VerificationCheck[]; disclosedPaths?: string[]; credentials?: VerifiedPresentationCredential[];
+}
+export interface VerificationPresentationLedger {
+  id: string; holderDid: string | null; presentationType: string; credentialCount: number;
+  outcome: 'pending' | 'valid' | 'invalid'; occurredAt: string; credentials: VerifiedPresentationCredential[];
+}
 export interface VerificationLog { id: string; credentialId: string | null; valid: boolean; checkedAt: string; format: string; failedChecks: string[]; disclosedPaths: string[] }
 export interface StructuredLog { id: string; occurredAt: string; level: string; module: string; action: string; success: boolean; message: string }
 export interface SensitiveAccessLog { id: string; actorId: string; credentialId: string; purposeCode: string; correlationId: string | null; occurredAt: string }

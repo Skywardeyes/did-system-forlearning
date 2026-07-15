@@ -95,10 +95,22 @@ export function registrationPackage(identity) {
   return { format: 'holder-did-registration-v1', name: identity.label, did: identity.did, document: identity.document }
 }
 
-function assertWalletPackage(value) {
-  if (value?.format !== 'wallet-vc-package-v1' || !value?.credentialId || !value?.holderDid || !value?.credential?.proof?.proofValue
+export function assertWalletPackage(value) {
+  const supportedFormat = value?.format === 'wallet-vc-package-v1' || value?.format === 'wallet-vc-package-v2'
+  if (!supportedFormat || !value?.credentialId || !value?.holderDid || !value?.credential?.proof?.proofValue
     || !value?.sdJwt?.issuerJwt || !value?.sdJwt?.disclosures || typeof value.sdJwt.disclosures !== 'object') {
     throw new Error('这不是可导入的钱包 VC 交付包')
+  }
+  const disclosurePaths = Object.keys(value.sdJwt.disclosures)
+  if (!disclosurePaths.length || disclosurePaths.length > 50 || disclosurePaths.some((path) => !/^credentialSubject\.[a-z][A-Za-z0-9_]{0,63}$/.test(path))) {
+    throw new Error('Wallet VC package contains invalid disclosure paths')
+  }
+  if (value.format === 'wallet-vc-package-v2') {
+    const fields = value?.display?.fields
+    if (!Array.isArray(fields) || fields.length !== disclosurePaths.length
+      || fields.some((field) => !disclosurePaths.includes(field?.path) || typeof field?.label !== 'string')) {
+      throw new Error('Dynamic wallet VC package is missing trusted field metadata')
+    }
   }
   return value
 }
@@ -137,6 +149,29 @@ export async function createWalletPresentation({ identity, walletPackage, paths,
   const signature = await crypto.subtle.sign({ name: 'Ed25519' }, identity.privateKey, new TextEncoder().encode(stableStringify(binding)))
   return { ...binding, holderProof: { type: 'Ed25519Signature2020', created: new Date().toISOString(),
     verificationMethod, proofPurpose: 'authentication', challenge: nonce, domain: audience, proofValue: toBase64Url(new Uint8Array(signature)) } }
+}
+
+export async function createMultiWalletPresentation({ identity, selections, challenge, domain }) {
+  if (!identity?.privateKey || !identity?.did) throw new Error('本钱包没有可用的 Holder 私钥')
+  const nonce = String(challenge || '').trim(); const audience = String(domain || '').trim().toLowerCase()
+  if (nonce.length < 16 || !audience) throw new Error('验证方 Challenge 至少 16 个字符，且必须填写验证方域名/标识')
+  if (!Array.isArray(selections) || !selections.length || selections.length > 10) throw new Error('请选择 1 至 10 张本地凭证')
+  const ids = new Set(); let disclosureCount = 0
+  const verifiableCredentials = selections.map(({ walletPackage, paths }) => {
+    if (!walletPackage?.credentialId || ids.has(walletPackage.credentialId) || walletPackage.holderDid !== identity.did) throw new Error('凭证重复或不属于当前 Holder DID')
+    ids.add(walletPackage.credentialId)
+    const selected = [...new Set(Array.isArray(paths) ? paths : [])]
+    if (!selected.length || selected.some((path) => !Object.prototype.hasOwnProperty.call(walletPackage?.sdJwt?.disclosures || {}, path))) throw new Error('每张凭证至少选择一个可披露字段')
+    disclosureCount += selected.length
+    if (disclosureCount > 50) throw new Error('一次最多披露 50 个字段')
+    return { format: 'vc+sd-jwt', sdJwt: `${walletPackage.sdJwt.issuerJwt}~${selected.map((path) => walletPackage.sdJwt.disclosures[path]).join('~')}~` }
+  })
+  const verificationMethod = identity.document.verificationMethod[0].id
+  const binding = { type: 'WalletBoundMultiSdJwtPresentation2026', holderDid: identity.did,
+    verifiableCredentials, challenge: nonce, domain: audience, createdAt: new Date().toISOString(), verificationMethod }
+  const signature = await crypto.subtle.sign({ name: 'Ed25519' }, identity.privateKey, new TextEncoder().encode(stableStringify(binding)))
+  return { ...binding, holderProof: { type: 'Ed25519Signature2020', verificationMethod, proofPurpose: 'authentication',
+    challenge: nonce, domain: audience, proofValue: toBase64Url(new Uint8Array(signature)) } }
 }
 
 export async function createInboxProof({ identity, action, challenge }) {

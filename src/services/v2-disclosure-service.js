@@ -1,12 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { RepositoryNotFoundError } from '../repositories/repository-errors.js';
 
-const DISCLOSABLE_CLAIMS = new Set(['credentialSubject.name', 'credentialSubject.course', 'credentialSubject.completionDate']);
-
-function selected(paths) {
+function selected(paths, allowedPaths) {
   const unique = [...new Set(Array.isArray(paths) ? paths : [])];
   if (!unique.length) throw new Error('At least one disclosure path is required');
-  if (unique.some((path) => !DISCLOSABLE_CLAIMS.has(path))) throw new Error('The requested disclosure path is not allowed');
+  if (unique.some((path) => !allowedPaths.has(path))) throw new Error('The requested disclosure path is not allowed');
   return unique;
 }
 
@@ -24,7 +22,6 @@ export class V2DisclosureService {
   }
 
   async createTeachingPresentation(context, credentialId, paths) {
-    const disclosurePaths = selected(paths);
     return this.unitOfWork.run(context, async (operation) => {
       const record = await this.credentialRepository.findById(operation, credentialId);
       if (!record) throw new RepositoryNotFoundError('Credential was not found in the current tenant');
@@ -32,6 +29,7 @@ export class V2DisclosureService {
       const material = await this.disclosureMaterialRepository.findByCredentialId(operation, credentialId);
       if (!material?.teachingMaterial) throw new Error('Credential has no teaching disclosure material');
       const { claims, manifest, proof } = material.teachingMaterial;
+      const disclosurePaths = selected(paths, new Set(Object.keys(claims)));
       return {
         type: 'EducationalSelectiveDisclosurePresentation2026', credentialId: manifest.credentialId, issuer: manifest.issuer,
         validFrom: manifest.validFrom, validUntil: manifest.validUntil,
@@ -42,13 +40,13 @@ export class V2DisclosureService {
   }
 
   async createSdJwtPresentation(context, credentialId, paths) {
-    const disclosurePaths = selected(paths);
     return this.unitOfWork.run(context, async (operation) => {
       const record = await this.credentialRepository.findById(operation, credentialId);
       if (!record) throw new RepositoryNotFoundError('Credential was not found in the current tenant');
       assertPresentationAllowed(record);
       const material = await this.disclosureMaterialRepository.findByCredentialId(operation, credentialId);
       if (!material?.sdJwtMaterial) throw new Error('Credential has no SD-JWT disclosure material');
+      const disclosurePaths = selected(paths, new Set(Object.keys(material.sdJwtMaterial.disclosures || {})));
       const disclosures = disclosurePaths.map((path) => material.sdJwtMaterial.disclosures[path]?.disclosure);
       if (disclosures.some((item) => !item)) throw new Error('SD-JWT disclosure material is incomplete');
       return `${material.sdJwtMaterial.issuerJwt}~${disclosures.join('~')}~`;

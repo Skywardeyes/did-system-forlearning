@@ -24,11 +24,12 @@ export class CredentialRepository {
     const payload = this.encryptPayload(record);
     await connection.execute(
       `INSERT INTO v2_credentials
-       (id, tenant_id, issuer_did_id, holder_did_id, status, valid_from, valid_until, issued_at,
+       (id, tenant_id, issuer_did_id, holder_did_id, template_id, template_version, schema_hash, status, valid_from, valid_until, issued_at,
         suspended_at, resumed_at, revoked_at, replaced_at, replaces_credential_id, replaced_by_credential_id,
         encrypted_payload, row_version)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), 1)`,
-      [record.id, record.tenantId, record.issuerDidId, record.holderDidId, record.status,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CAST(? AS JSON), 1)`,
+      [record.id, record.tenantId, record.issuerDidId, record.holderDidId, record.templateId || null,
+        record.templateVersion || null, record.schemaHash || null, record.status,
         sqlDate(record.validFrom), sqlDate(record.validUntil), sqlDate(record.issuedAt), sqlDate(record.suspendedAt), sqlDate(record.resumedAt),
         sqlDate(record.revokedAt), sqlDate(record.replacedAt), record.replacesCredentialId || null,
         record.replacedByCredentialId || null, JSON.stringify(payload)],
@@ -59,7 +60,7 @@ export class CredentialRepository {
     const [countRows] = await connection.execute(`SELECT COUNT(*) AS total FROM v2_credentials WHERE ${where}`, params);
     const pagination = sqlPagination(page, pageSize);
     const [rows] = await connection.execute(
-      `SELECT id, tenant_id, issuer_did_id, holder_did_id, status, valid_from, valid_until, issued_at,
+      `SELECT id, tenant_id, issuer_did_id, holder_did_id, template_id, template_version, schema_hash, status, valid_from, valid_until, issued_at,
               suspended_at, resumed_at, revoked_at, replaced_at, replaces_credential_id,
               replaced_by_credential_id, row_version
        FROM v2_credentials WHERE ${where}
@@ -93,6 +94,7 @@ export class CredentialRepository {
   mapSummaryRow(row) {
     return {
       id: row.id, tenantId: row.tenant_id, issuerDidId: row.issuer_did_id, holderDidId: row.holder_did_id,
+      templateId: row.template_id || null, templateVersion: row.template_version == null ? null : Number(row.template_version), schemaHash: row.schema_hash || null,
       status: row.status, validFrom: toIso(row.valid_from), validUntil: toIso(row.valid_until), issuedAt: toIso(row.issued_at),
       suspendedAt: row.suspended_at ? toIso(row.suspended_at) : null, resumedAt: row.resumed_at ? toIso(row.resumed_at) : null,
       revokedAt: row.revoked_at ? toIso(row.revoked_at) : null, replacedAt: row.replaced_at ? toIso(row.replaced_at) : null,

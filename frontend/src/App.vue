@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useSessionStore } from './stores/session'
 import { useWorkspaceStore } from './stores/workspace'
@@ -29,6 +29,10 @@ async function changeWorkspace(event: Event) {
 }
 
 async function logout() { await session.logout(); await router.replace('/login') }
+
+watch(() => session.session?.tenant.id, (tenantId) => {
+  if (tenantId) workspace.refresh().catch(() => undefined)
+}, { immediate: true })
 </script>
 
 <template>

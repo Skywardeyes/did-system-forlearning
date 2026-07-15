@@ -13,14 +13,14 @@ export class VerifierChallengeRepository {
     return { ...entry, tenantId: context.tenantId, actorId: context.actorId };
   }
 
-  async consume({ connection, context }, { challengeHash, domain, credentialId, consumedAt }) {
+  async consume({ connection, context }, { challengeHash, domain, credentialId, presentationId = null, consumedAt }) {
     requireTenantContext(context);
     const [result] = await connection.execute(
       `UPDATE v2_verifier_challenges
-       SET consumed_at = ?, consumed_credential_id = ?
+       SET consumed_at = ?, consumed_credential_id = ?, consumed_presentation_id = ?
        WHERE tenant_id = ? AND challenge_hash = ? AND domain = ?
          AND consumed_at IS NULL AND expires_at > UTC_TIMESTAMP(3)`,
-      [sqlDate(consumedAt), credentialId || null, context.tenantId, challengeHash, domain],
+      [sqlDate(consumedAt), credentialId || null, presentationId, context.tenantId, challengeHash, domain],
     );
     return result.affectedRows === 1;
   }

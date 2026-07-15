@@ -1,8 +1,8 @@
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { createClaimDigest, verifyCompactJwt, verifyCredentialSignature, verifyPayload } from '../crypto.js';
 
-const ALLOWED_PATHS = new Set(['credentialSubject.name', 'credentialSubject.course', 'credentialSubject.completionDate']);
-const SD_PATHS = { name: 'credentialSubject.name', course: 'credentialSubject.course', completion_date: 'credentialSubject.completionDate' };
+const LEGACY_SD_PATHS = { name: 'credentialSubject.name', course: 'credentialSubject.course', completion_date: 'credentialSubject.completionDate' };
+const SAFE_CLAIM_NAME = /^[a-z][A-Za-z0-9_]{0,63}$/;
 const check = (key, label, passed, detail) => ({ key, label, passed: Boolean(passed), detail });
 const challengeHash = (value) => createHash('sha256').update(value).digest('hex');
 
@@ -13,10 +13,12 @@ function effectiveStatus(record) {
 }
 
 export class V2VerificationService {
-  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, verificationLogRepository, verifierChallengeRepository = null }) {
+  constructor({ unitOfWork, didRepository, didKeyVersionRepository, credentialRepository, verificationLogRepository,
+    verifierChallengeRepository = null, publicTrustRepository = null, presentationRepository = null }) {
     this.unitOfWork = unitOfWork; this.didRepository = didRepository; this.didKeyVersionRepository = didKeyVersionRepository;
     this.credentialRepository = credentialRepository; this.verificationLogRepository = verificationLogRepository;
     this.verifierChallengeRepository = verifierChallengeRepository;
+    this.publicTrustRepository = publicTrustRepository; this.presentationRepository = presentationRepository;
   }
 
   async issueWalletChallenge(context, input = {}) {
@@ -33,18 +35,31 @@ export class V2VerificationService {
     return { challenge, domain, expiresAt: expiresAt.toISOString(), ttlSeconds: requestedTtl };
   }
 
+  async listPresentations(context, query = {}) {
+    if (!this.presentationRepository) throw new Error('Verification presentation ledger is not configured');
+    return this.unitOfWork.run(context, (operation) => this.presentationRepository.list(operation, query));
+  }
+
   async resolveIssuerKey(operation, issuerDid, proof) {
-    const issuer = await this.didRepository.findByDid(operation, issuerDid);
-    const key = issuer && proof && await this.didKeyVersionRepository.findByDidVersion(operation, issuer.id, Number(proof.keyVersion || 1));
+    const issuer = this.publicTrustRepository
+      ? await this.publicTrustRepository.resolveDid(operation, issuerDid)
+      : await this.didRepository.findByDid(operation, issuerDid);
+    const key = issuer && proof && (this.publicTrustRepository
+      ? await this.publicTrustRepository.resolveKey(operation, issuerDid, Number(proof.keyVersion || 1))
+      : await this.didKeyVersionRepository.findByDidVersion(operation, issuer.id, Number(proof.keyVersion || 1)));
     const matches = Boolean(key) && key.verificationMethod === proof?.verificationMethod;
     return { issuer, key: matches ? key : null };
+  }
+
+  async credentialStatus(operation, id) {
+    return this.publicTrustRepository ? this.publicTrustRepository.findCredentialStatus(operation, id) : this.credentialRepository.findById(operation, id);
   }
 
   async verifyCredential(context, credential) {
     return this.unitOfWork.run(context, async (operation) => {
       const format = Boolean(credential?.id && credential?.issuer && credential?.credentialSubject?.id && credential?.proof?.proofValue);
       const { issuer, key } = await this.resolveIssuerKey(operation, credential?.issuer, credential?.proof);
-      const record = credential?.id ? await this.credentialRepository.findById(operation, credential.id) : null;
+      const record = credential?.id ? await this.credentialStatus(operation, credential.id) : null;
       let signature = false;
       try { signature = Boolean(key) && verifyCredentialSignature(credential, key.publicJwk); } catch { signature = false; }
       const now = Date.now();
@@ -77,9 +92,10 @@ export class V2VerificationService {
       const paths = disclosures.map((item) => item?.path); const unique = new Set(paths);
       const digests = disclosures.length > 0 && unique.size === disclosures.length && disclosures.every((item) => {
         const expected = presentation?.claimDigests?.[item.path];
-        return ALLOWED_PATHS.has(item.path) && typeof expected === 'string' && createClaimDigest(item.path, item.salt, item.value) === expected;
+        return /^credentialSubject\.[a-z][A-Za-z0-9_]{0,63}$/.test(item.path) && typeof expected === 'string'
+          && createClaimDigest(item.path, item.salt, item.value) === expected;
       });
-      const record = presentation?.credentialId ? await this.credentialRepository.findById(operation, presentation.credentialId) : null;
+      const record = presentation?.credentialId ? await this.credentialStatus(operation, presentation.credentialId) : null;
       const now = Date.now(); const validity = Number.isFinite(Date.parse(presentation?.validFrom)) && Number.isFinite(Date.parse(presentation?.validUntil))
         && Date.parse(presentation.validFrom) <= now && now <= Date.parse(presentation.validUntil);
       const status = effectiveStatus(record);
@@ -98,7 +114,7 @@ export class V2VerificationService {
   async verifySdJwt(context, compactPresentation) {
     return this.unitOfWork.run(context, async (operation) => {
       const parts = String(compactPresentation || '').split('~'); const issuerJwt = parts.shift(); const trailing = parts.pop(); const disclosures = parts;
-      const format = Boolean(issuerJwt && trailing === '' && disclosures.length);
+      const format = Boolean(issuerJwt && issuerJwt.split('.').length === 3 && trailing === '' && disclosures.length && disclosures.length <= 50);
       let header = null; let payload = null;
       try { header = JSON.parse(Buffer.from(issuerJwt.split('.')[0], 'base64url').toString('utf8')); payload = JSON.parse(Buffer.from(issuerJwt.split('.')[1], 'base64url').toString('utf8')); } catch { /* checks report failure */ }
       const { issuer, key } = await this.resolveIssuerKey(operation, payload?.iss, { keyVersion: header?.keyVersion, verificationMethod: header?.kid });
@@ -109,13 +125,23 @@ export class V2VerificationService {
       if (disclosurePassed) for (const disclosure of disclosures) {
         try {
           const [salt, name, value] = JSON.parse(Buffer.from(disclosure, 'base64url').toString('utf8'));
-          const path = SD_PATHS[name]; const digest = createHash('sha256').update(disclosure).digest('base64url');
+          const path = LEGACY_SD_PATHS[name] || (SAFE_CLAIM_NAME.test(String(name)) ? `credentialSubject.${name}` : null);
+          const digest = createHash('sha256').update(disclosure).digest('base64url');
           if (!salt || !path || value === undefined || claimNames.has(name) || !payload._sd.includes(digest)) { disclosurePassed = false; break; }
           claimNames.add(name); paths.push(path);
         } catch { disclosurePassed = false; break; }
       }
+      let schemaPassed = true; let schemaDetail = 'Legacy credential without a versioned template';
+      if (payload?.schema_id || payload?.schema_version || payload?.schema_hash) {
+        const schema = this.publicTrustRepository && payload?.schema_id && Number.isInteger(Number(payload?.schema_version)) && payload?.schema_hash
+          ? await this.publicTrustRepository.resolveCredentialTemplate(operation, payload.schema_id, Number(payload.schema_version), payload.schema_hash)
+          : null;
+        const declaredFields = new Set((schema?.schema?.fields || []).map((field) => field.key));
+        schemaPassed = Boolean(schema && schema.credentialType === payload?.vct && [...claimNames].every((name) => declaredFields.has(name)));
+        schemaDetail = schemaPassed ? `Template ${schema.id} v${schema.version} and disclosed fields match` : 'Template version, digest, credential type, or disclosed field is not trusted';
+      }
       const now = Math.floor(Date.now() / 1000); const validity = Number.isFinite(payload?.nbf) && Number.isFinite(payload?.exp) && payload.nbf <= now && now <= payload.exp;
-      const record = payload?.jti ? await this.credentialRepository.findById(operation, payload.jti) : null; const status = effectiveStatus(record);
+      const record = payload?.jti ? await this.credentialStatus(operation, payload.jti) : null; const status = effectiveStatus(record);
       const checks = [check('format', 'SD-JWT 格式', format, format ? '紧凑序列化结构完整' : '格式无效'),
         check('issuer', 'Issuer DID 解析', issuer, issuer ? '已解析签发方' : '签发方不存在'),
         check('didStatus', 'Issuer DID 状态', issuer?.status === 'active', issuer?.status === 'active' ? '签发方有效' : '签发方停用或不存在'),
@@ -124,6 +150,7 @@ export class V2VerificationService {
         check('disclosedClaims', 'SD-JWT 披露摘要', disclosurePassed, disclosurePassed ? `${paths.length} 个披露项摘要一致` : '披露项无效或摘要不匹配'),
         check('validity', '凭证有效期', validity, validity && payload?.exp ? `有效至 ${new Date(payload.exp * 1000).toISOString()}` : '有效期无效'),
         check('credentialStatus', '凭证当前状态', status === 'active', status === 'active' ? '凭证当前有效' : `凭证状态为 ${status}`)];
+      checks.splice(4, 0, check('credentialSchema', 'Credential schema', schemaPassed, schemaDetail));
       return this.finish(operation, 'sd-jwt', payload?.jti || null, checks, paths, { format: 'sd-jwt' });
     });
   }
@@ -133,7 +160,9 @@ export class V2VerificationService {
     return this.unitOfWork.run(context, async (operation) => {
       let payload = null;
       try { payload = JSON.parse(Buffer.from(String(presentation?.sdJwt || '').split('~')[0].split('.')[1], 'base64url').toString('utf8')); } catch { /* reported below */ }
-      const holder = presentation?.holderDid && await this.didRepository.findByDid(operation, presentation.holderDid);
+      const holder = presentation?.holderDid && (this.publicTrustRepository
+        ? await this.publicTrustRepository.resolveDid(operation, presentation.holderDid)
+        : await this.didRepository.findByDid(operation, presentation.holderDid));
       const holderProof = presentation?.holderProof;
       const verificationMethod = holder?.document?.verificationMethod?.find((item) => item.id === holderProof?.verificationMethod);
       const binding = {
@@ -142,7 +171,8 @@ export class V2VerificationService {
       };
       let holderSignature = false;
       try { holderSignature = Boolean(verificationMethod?.publicKeyJwk) && verifyPayload(binding, verificationMethod.publicKeyJwk, holderProof?.proofValue); } catch { holderSignature = false; }
-      const holderRegistered = Boolean(holder?.role === 'holder' && holder?.metadata?.keyCustody === 'holder_self_custody');
+      const holderRegistered = Boolean(holder?.role === 'holder' && holder?.status === 'active'
+        && (this.publicTrustRepository || holder?.metadata?.keyCustody === 'holder_self_custody'));
       const holderMatchesSubject = Boolean(payload?.sub && payload.sub === presentation?.holderDid);
       const challengeBinding = typeof holderProof?.challenge === 'string' && holderProof.challenge.length >= 16
         && holderProof.challenge === presentation?.challenge && holderProof.domain === presentation?.domain;
@@ -163,11 +193,72 @@ export class V2VerificationService {
     });
   }
 
+  async verifyMultiWalletPresentation(context, presentation) {
+    const entries = Array.isArray(presentation?.verifiableCredentials) ? presentation.verifiableCredentials : [];
+    const disclosureCount = entries.reduce((count, entry) => count + Math.max(0, String(entry?.sdJwt || '').split('~').length - 2), 0);
+    const format = presentation?.type === 'WalletBoundMultiSdJwtPresentation2026' && entries.length > 0 && entries.length <= 10
+      && disclosureCount > 0 && disclosureCount <= 50
+      && entries.every((entry) => entry?.format === 'vc+sd-jwt' && typeof entry.sdJwt === 'string');
+    const parsed = entries.map((entry) => {
+      try { return JSON.parse(Buffer.from(entry.sdJwt.split('~')[0].split('.')[1], 'base64url').toString('utf8')); } catch { return null; }
+    });
+    const identifiers = parsed.map((payload) => payload?.jti).filter(Boolean);
+    const uniqueCredentials = identifiers.length === entries.length && new Set(identifiers).size === entries.length;
+    const credentialResults = [];
+    for (const entry of entries) credentialResults.push(await this.verifySdJwt(context, entry.sdJwt));
+
+    return this.unitOfWork.run(context, async (operation) => {
+      const presentationId = randomUUID(); const occurredAt = new Date().toISOString();
+      const holder = presentation?.holderDid && (this.publicTrustRepository
+        ? await this.publicTrustRepository.resolveDid(operation, presentation.holderDid)
+        : await this.didRepository.findByDid(operation, presentation.holderDid));
+      const holderProof = presentation?.holderProof;
+      const verificationMethod = holder?.document?.verificationMethod?.find((item) => item.id === holderProof?.verificationMethod);
+      const binding = { type: presentation?.type, holderDid: presentation?.holderDid, verifiableCredentials: entries,
+        challenge: presentation?.challenge, domain: presentation?.domain, createdAt: presentation?.createdAt,
+        verificationMethod: presentation?.verificationMethod };
+      let holderSignature = false;
+      try { holderSignature = Boolean(verificationMethod?.publicKeyJwk) && verifyPayload(binding, verificationMethod.publicKeyJwk, holderProof?.proofValue); } catch { holderSignature = false; }
+      const holderRegistered = Boolean(holder?.role === 'holder' && holder?.status === 'active'
+        && (this.publicTrustRepository || holder?.metadata?.keyCustody === 'holder_self_custody'));
+      const subjectsMatch = parsed.length > 0 && parsed.every((payload) => payload?.sub === presentation?.holderDid);
+      const allCredentials = uniqueCredentials && credentialResults.length === entries.length && credentialResults.every((result) => result.valid);
+      const challengeBinding = typeof holderProof?.challenge === 'string' && holderProof.challenge.length >= 16
+        && holderProof.challenge === presentation?.challenge && holderProof.domain === presentation?.domain;
+      const baseValid = format && holderRegistered && subjectsMatch && holderSignature && allCredentials && challengeBinding;
+      if (this.presentationRepository) await this.presentationRepository.begin(operation, { id: presentationId,
+        holderDid: presentation?.holderDid || null, presentationType: presentation?.type || 'unknown', credentialCount: entries.length,
+        occurredAt, evidence: { credentialIds: identifiers, disclosedPaths: credentialResults.map((result) => result.disclosedPaths || []) } });
+      const challengeConsumed = baseValid && this.verifierChallengeRepository
+        ? await this.verifierChallengeRepository.consume(operation, { challengeHash: challengeHash(holderProof.challenge),
+          domain: holderProof.domain, presentationId: this.presentationRepository ? presentationId : null, consumedAt: occurredAt }) : false;
+      const challenge = challengeBinding && challengeConsumed;
+      const checks = [
+        check('format', '多凭证组合出示格式', format && uniqueCredentials, format && uniqueCredentials ? `${entries.length} 张凭证结构完整且未重复` : '结构无效、数量超限或凭证重复'),
+        check('holderDid', 'Holder DID 登记', holderRegistered, holderRegistered ? '已解析自托管 Holder DID' : 'Holder DID 未登记或已停用'),
+        check('holderSubjects', '所有凭证主体一致', subjectsMatch, subjectsMatch ? '所有 SD-JWT sub 均属于当前 Holder' : '存在不属于当前 Holder 的凭证'),
+        check('holderProof', 'Holder 组合签名', holderSignature, holderSignature ? '完整凭证组合由 Holder 本地私钥签名' : 'Holder 组合签名无效'),
+        check('credentials', '逐张凭证验证', allCredentials, allCredentials ? `${entries.length} 张凭证全部通过` : '至少一张凭证无效'),
+        check('challenge', '验证方 Challenge 绑定', challenge, challenge ? 'Challenge 已对整个组合原子消费' : 'Challenge 无效、过期或已使用'),
+      ];
+      const valid = checks.every((item) => item.passed);
+      const items = credentialResults.map((result, index) => ({ credentialId: result.credentialId,
+        issuerDid: parsed[index]?.iss || null, credentialType: parsed[index]?.vct || null, outcome: result.valid ? 'valid' : 'invalid',
+        disclosedPaths: result.disclosedPaths || [], failedChecks: result.checks.filter((item) => !item.passed).map((item) => item.key) }));
+      if (this.presentationRepository) await this.presentationRepository.complete(operation, presentationId, valid ? 'valid' : 'invalid', items);
+      await this.verificationLogRepository.append(operation, { id: randomUUID(), tenantId: operation.context.tenantId, credentialId: null,
+        verificationKind: 'wallet-multi-sd-jwt', outcome: valid ? 'valid' : 'invalid', occurredAt,
+        evidence: { checks, disclosedPaths: items.flatMap((item) => item.disclosedPaths), failedChecks: checks.filter((item) => !item.passed).map((item) => item.key),
+          presentationId, credentialIds: identifiers } });
+      return { valid, presentationId, credentialId: null, checkedAt: occurredAt, checks, credentials: items };
+    });
+  }
+
   async finish(operation, kind, credentialId, checks, disclosedPaths, extra = {}) {
     const checkedAt = new Date().toISOString(); const valid = checks.every((item) => item.passed);
     await this.verificationLogRepository.append(operation, { id: randomUUID(), tenantId: operation.context.tenantId, credentialId,
       verificationKind: kind, outcome: valid ? 'valid' : 'invalid', occurredAt: checkedAt,
       evidence: { checks, disclosedPaths, failedChecks: checks.filter((item) => !item.passed).map((item) => item.key) } });
-    return { valid, credentialId, checkedAt, checks, ...extra };
+    return { valid, credentialId, checkedAt, checks, disclosedPaths: structuredClone(disclosedPaths || []), ...extra };
   }
 }
